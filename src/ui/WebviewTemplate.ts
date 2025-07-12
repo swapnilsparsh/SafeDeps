@@ -3,8 +3,8 @@ import {
   getWebviewHeader,
   getWebviewButtons,
   getWebviewContent,
-  getWebviewJavaScript
-} from '../webview';
+  getWebviewJavaScript,
+} from "../webview";
 
 export const generateWebviewHtml = (): string => {
   return `<!DOCTYPE html>
