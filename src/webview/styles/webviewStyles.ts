@@ -123,5 +123,74 @@ export const getWebviewStyles = (): string => {
             margin: 0 auto 16px;
             opacity: 0.5;
         }
+        .package-metadata {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            margin-top: 2px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .metadata-item {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .metadata-badge {
+            padding: 1px 4px;
+            border-radius: 2px;
+            font-size: 10px;
+            font-weight: 500;
+        }
+        .metadata-badge.outdated {
+            background-color: var(--vscode-errorBackground);
+            color: var(--vscode-errorForeground);
+        }
+        .metadata-badge.unknown-license {
+            background-color: var(--vscode-warningBackground);
+            color: var(--vscode-warningForeground);
+        }
+        .metadata-badge.good {
+            background-color: var(--vscode-charts-green);
+            color: var(--vscode-editor-background);
+        }
+        .package-item {
+            border-left: 3px solid transparent;
+            transition: border-color 0.2s;
+        }
+        .package-item.outdated {
+            border-left-color: var(--vscode-errorForeground);
+            background-color: rgba(255, 99, 71, 0.05);
+        }
+        .package-item.unknown-license {
+            border-left-color: var(--vscode-warningForeground);
+            background-color: rgba(255, 193, 7, 0.05);
+        }
+        .package-item.critical {
+            border-left-color: var(--vscode-errorForeground);
+            background-color: rgba(255, 99, 71, 0.1);
+        }
+        .size-indicator {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            margin-right: 4px;
+        }
+        .size-small { background-color: var(--vscode-charts-green); }
+        .size-medium { background-color: var(--vscode-charts-yellow); }
+        .size-large { background-color: var(--vscode-charts-orange); }
+        .size-huge { background-color: var(--vscode-charts-red); }
+        .summary-alerts {
+            margin-top: 8px;
+            padding: 8px;
+            border-radius: 4px;
+            background-color: var(--vscode-warningBackground);
+            color: var(--vscode-warningForeground);
+            font-size: 12px;
+        }
+        .summary-alerts.hidden {
+            display: none;
+        }
     `;
 };

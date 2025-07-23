@@ -18,7 +18,7 @@ export const getWebviewButtons = (): string => {
             🔍 Scan Dependencies
         </button>
         <button class="scan-button" onclick="scanPackageJson()">
-            📦 Analyze package.json Dependencies
+            📦 Analyze Dependencies
         </button>
     `;
 };

@@ -7,6 +7,8 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
 
   private _view?: vscode.WebviewView;
   private _dependencyScanner: DependencyScanner;
+  private _lastScanResult: any = null;
+  private _lastCommand: string | null = null;
 
   constructor(private readonly _extensionUri: vscode.Uri) {
     this._dependencyScanner = new DependencyScanner();
@@ -40,6 +42,9 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
         case "openFile":
           this._openFile(message.filePath);
           break;
+        case "restoreData":
+          this._restoreLastData();
+          break;
       }
     });
   }
@@ -47,7 +52,24 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
   private async _loadInitialContent(): Promise<void> {
     if (this._view) {
       this._view.webview.html = generateWebviewHtml();
-      await this._scanAndDisplayDependencies();
+
+      if (this._lastScanResult && this._lastCommand) {
+        this._restoreLastData();
+      } else {
+        await this._scanAndDisplayDependencies();
+      }
+    }
+  }
+
+  private _restoreLastData(): void {
+    if (this._view && this._lastScanResult && this._lastCommand) {
+      this._view.webview.postMessage({
+        command:
+          this._lastCommand === "scanDependencies"
+            ? "updateDependencies"
+            : "updatePackageJsonDependencies",
+        data: this._lastScanResult,
+      });
     }
   }
 
@@ -58,6 +80,9 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
 
     try {
       const summary = await this._dependencyScanner.getScanSummary();
+
+      this._lastScanResult = summary;
+      this._lastCommand = "scanDependencies";
 
       this._view.webview.postMessage({
         command: "updateDependencies",
@@ -74,7 +99,11 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
     }
 
     try {
-      const summary = await this._dependencyScanner.getPackageJsonSummary();
+      const summary =
+        await this._dependencyScanner.getPackageJsonSummaryWithMetadata();
+
+      this._lastScanResult = summary;
+      this._lastCommand = "scanPackageJson";
 
       this._view.webview.postMessage({
         command: "updatePackageJsonDependencies",

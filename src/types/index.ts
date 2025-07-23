@@ -55,12 +55,81 @@ export interface ScanSummary {
   files: DependencyFile[];
 }
 
+export interface PackageMetadata {
+  name: string;
+  version: string;
+  license: string;
+  lastUpdated: Date;
+  size: number;
+  description: string;
+  author: string;
+  homepage: string;
+  repository: string;
+  isOutdated: boolean;
+  hasUnknownLicense: boolean;
+}
+
+export interface PackageDependencyWithMetadata extends PackageDependency {
+  metadata?: PackageMetadata;
+}
+
+export interface PackageJsonInfoWithMetadata extends PackageJsonInfo {
+  dependencies: PackageDependencyWithMetadata[];
+}
+
 export interface PackageJsonSummary {
   totalPackageFiles: number;
   totalDependencies: number;
   dependencyBreakdown: Record<string, number>;
   packages: PackageJsonInfo[];
   allDependencies: { packageFile: string; dependency: PackageDependency }[];
+}
+
+export interface PackageJsonSummaryWithMetadata {
+  totalPackageFiles: number;
+  totalDependencies: number;
+  dependencyBreakdown: Record<string, number>;
+  packages: PackageJsonInfoWithMetadata[];
+  allDependencies: {
+    packageFile: string;
+    dependency: PackageDependencyWithMetadata;
+  }[];
+  outdatedPackages: number;
+  unknownLicensePackages: number;
+}
+
+export interface NpmRegistryResponse {
+  name: string;
+  "dist-tags": {
+    latest: string;
+    [tag: string]: string;
+  };
+  versions: {
+    [version: string]: {
+      name: string;
+      version: string;
+      description?: string;
+      license?:
+        | string
+        | { type: string; name?: string }
+        | Array<string | { type: string; name?: string }>;
+      author?: string | { name: string; email?: string };
+      homepage?: string;
+      repository?: string | { url: string; type?: string };
+      dist: {
+        size?: number;
+        unpackedSize?: number;
+        [key: string]: any;
+      };
+      [key: string]: any;
+    };
+  };
+  time: {
+    [version: string]: string;
+    created: string;
+    modified: string;
+  };
+  [key: string]: any;
 }
 
 export type DependencyFileType = DependencyFile["type"];

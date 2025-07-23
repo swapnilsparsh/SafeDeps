@@ -10,6 +10,12 @@ export {
   IPackageJsonParser,
 } from "./parsers/PackageJsonParser";
 
+// Service exports
+export {
+  NpmRegistryService,
+  INpmRegistryService,
+} from "./services/NpmRegistryService";
+
 // Provider exports
 export { SafeDepsWebviewViewProvider } from "./providers/SafeDepsWebviewViewProvider";
 

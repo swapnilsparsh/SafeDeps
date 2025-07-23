@@ -2,14 +2,64 @@ export const getWebviewJavaScript = (): string => {
   return `
         const vscode = acquireVsCodeApi();
 
+        let isLoading = false;
+        let lastData = null;
+        let lastCommand = null;
+
         function scanDependencies() {
-            document.getElementById('content').innerHTML = '<div class="loading">Scanning workspace...</div>';
+            if (isLoading) return;
+
+            setLoadingState(true);
+            lastCommand = 'scanDependencies';
+            document.getElementById('content').innerHTML = \`
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <div>Scanning workspace...</div>
+                </div>
+            \`;
             vscode.postMessage({ command: 'scanDependencies' });
         }
 
         function scanPackageJson() {
-            document.getElementById('content').innerHTML = '<div class="loading">Analyzing package.json dependencies...</div>';
+            if (isLoading) return;
+
+            setLoadingState(true);
+            lastCommand = 'scanPackageJson';
+            document.getElementById('content').innerHTML = \`
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <div>Analyzing dependencies and fetching metadata from npm registry...</div>
+                </div>
+            \`;
             vscode.postMessage({ command: 'scanPackageJson' });
+        }
+
+        function setLoadingState(loading) {
+            isLoading = loading;
+            const scanButton = document.querySelector('button[onclick="scanDependencies()"]');
+            const packageButton = document.querySelector('button[onclick="scanPackageJson()"]');
+
+            if (scanButton) {
+                scanButton.disabled = loading;
+                scanButton.style.opacity = loading ? '0.6' : '1';
+                scanButton.style.cursor = loading ? 'not-allowed' : 'pointer';
+            }
+
+            if (packageButton) {
+                packageButton.disabled = loading;
+                packageButton.style.opacity = loading ? '0.6' : '1';
+                packageButton.style.cursor = loading ? 'not-allowed' : 'pointer';
+            }
+        }
+
+        function restoreLastData() {
+            if (lastData && lastCommand) {
+                if (lastCommand === 'scanDependencies') {
+                    renderDependencies(lastData);
+                } else if (lastCommand === 'scanPackageJson') {
+                    renderPackageJsonDependencies(lastData);
+                }
+            }
         }
 
         function openFile(filePath) {
@@ -31,6 +81,10 @@ export const getWebviewJavaScript = (): string => {
         }
 
         function renderDependencies(summary) {
+            setLoadingState(false);
+            lastData = summary;
+            lastCommand = 'scanDependencies';
+
             const content = document.getElementById('content');
 
             if (summary.totalFiles === 0) {
@@ -94,6 +148,10 @@ export const getWebviewJavaScript = (): string => {
         }
 
         function renderPackageJsonDependencies(summary) {
+            setLoadingState(false);
+            lastData = summary;
+            lastCommand = 'scanPackageJson';
+
             const content = document.getElementById('content');
 
             if (summary.totalPackageFiles === 0) {
@@ -108,6 +166,8 @@ export const getWebviewJavaScript = (): string => {
                 return;
             }
 
+            const hasAlerts = summary.outdatedPackages > 0 || summary.unknownLicensePackages > 0;
+
             let html = \`
                 <div class="summary">
                     <div class="summary-title">Package.json Analysis</div>
@@ -118,6 +178,10 @@ export const getWebviewJavaScript = (): string => {
                         DevDependencies: \${summary.dependencyBreakdown.devDependencies}
                         \${summary.dependencyBreakdown.peerDependencies > 0 ? ' | Peer: ' + summary.dependencyBreakdown.peerDependencies : ''}
                         \${summary.dependencyBreakdown.optionalDependencies > 0 ? ' | Optional: ' + summary.dependencyBreakdown.optionalDependencies : ''}
+                    </div>
+                    <div class="summary-alerts \${hasAlerts ? '' : 'hidden'}">
+                        \${summary.outdatedPackages > 0 ? '⚠️ ' + summary.outdatedPackages + ' outdated package' + (summary.outdatedPackages !== 1 ? 's' : '') + ' (not updated in 1+ year)' : ''}
+                        \${summary.unknownLicensePackages > 0 ? (summary.outdatedPackages > 0 ? '<br>' : '') + '❓ ' + summary.unknownLicensePackages + ' package' + (summary.unknownLicensePackages !== 1 ? 's' : '') + ' with unknown license' : ''}
                     </div>
                 </div>
                 <div class="dependency-files">
@@ -158,12 +222,37 @@ export const getWebviewJavaScript = (): string => {
                                 'optionalDependency': '#9C27B0'
                             }[type];
 
+                            const metadata = dep.metadata;
+                            let packageClasses = 'file-item';
+                            let alertBadges = '';
+
+                            if (metadata) {
+                                if (metadata.isOutdated && metadata.hasUnknownLicense) {
+                                    packageClasses += ' critical';
+                                } else if (metadata.isOutdated) {
+                                    packageClasses += ' outdated';
+                                } else if (metadata.hasUnknownLicense) {
+                                    packageClasses += ' unknown-license';
+                                }
+
+                                if (metadata.isOutdated) {
+                                    alertBadges += '<span class="metadata-badge outdated">OUTDATED</span>';
+                                }
+                                if (metadata.hasUnknownLicense) {
+                                    alertBadges += '<span class="metadata-badge unknown-license">NO LICENSE</span>';
+                                }
+                            }
+
                             html += \`
-                                <div class="file-item" style="padding: 4px 8px;">
+                                <div class="\${packageClasses} package-item" style="padding: 6px 8px;">
                                     <span style="width: 8px; height: 8px; border-radius: 50%; background-color: \${typeColor}; margin-right: 8px; flex-shrink: 0;"></span>
                                     <div style="flex: 1;">
-                                        <div class="file-name">\${dep.name}</div>
+                                        <div class="file-name">
+                                            \${dep.name}
+                                            \${alertBadges}
+                                        </div>
                                         <div class="file-path">\${dep.version}</div>
+                                        \${metadata ? renderPackageMetadata(metadata) : '<div class="package-metadata">Loading metadata...</div>'}
                                     </div>
                                 </div>
                             \`;
@@ -180,7 +269,67 @@ export const getWebviewJavaScript = (): string => {
             content.innerHTML = html;
         }
 
+        function renderPackageMetadata(metadata) {
+            if (!metadata) {
+                return '<div class="package-metadata">Metadata unavailable</div>';
+            }
+
+            const sizeClass = getSizeClass(metadata.size);
+            const formattedSize = formatBytes(metadata.size);
+            const lastUpdated = formatDate(new Date(metadata.lastUpdated));
+
+            return \`
+                <div class="package-metadata">
+                    <div class="metadata-item">
+                        <span class="size-indicator \${sizeClass}"></span>
+                        <span>\${formattedSize}</span>
+                    </div>
+                    <div class="metadata-item">
+                        📄 \${metadata.license}
+                    </div>
+                    <div class="metadata-item">
+                        📅 \${lastUpdated}
+                    </div>
+                    \${metadata.author ? \`<div class="metadata-item">👤 \${metadata.author}</div>\` : ''}
+                </div>
+            \`;
+        }
+
+        function getSizeClass(size) {
+            if (size < 50000) return 'size-small';
+            if (size < 500000) return 'size-medium';
+            if (size < 5000000) return 'size-large';
+            return 'size-huge';
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        function formatDate(date) {
+            if (date.getTime() === 0) return 'Unknown';
+
+            const now = new Date();
+            const diffMs = now - date;
+            const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+            if (diffDays < 30) {
+                return \`\${diffDays}d ago\`;
+            } else if (diffDays < 365) {
+                const months = Math.floor(diffDays / 30);
+                return \`\${months}mo ago\`;
+            } else {
+                const years = Math.floor(diffDays / 365);
+                return \`\${years}y ago\`;
+            }
+        }
+
         function showError(error) {
+            setLoadingState(false);
             const content = document.getElementById('content');
             content.innerHTML = \`
                 <div class="error">
@@ -204,9 +353,18 @@ export const getWebviewJavaScript = (): string => {
                     break;
             }
         });
+
+        window.addEventListener('focus', () => {
+            restoreLastData();
+        });
+
         // Request scan results when the webview loads
         window.addEventListener('DOMContentLoaded', () => {
-            vscode.postMessage({ command: 'scanDependencies' });
+            if (lastData && lastCommand) {
+                restoreLastData();
+            } else {
+                scanDependencies();
+            }
         });
     `;
 };
