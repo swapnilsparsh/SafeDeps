@@ -2,15 +2,18 @@ import { PackageJsonSummary, PackageJsonSummaryWithMetadata } from "../types";
 import { BaseDependencyScanner } from "./BaseDependencyScanner";
 import { PackageJsonParser } from "../parsers/PackageJsonParser";
 import { NpmRegistryService } from "../services/NpmRegistryService";
+import { OsvService } from "../services/OsvService";
 
 export class DependencyScanner extends BaseDependencyScanner {
   private packageJsonParser: PackageJsonParser;
   private npmRegistryService: NpmRegistryService;
+  private osvService: OsvService;
 
   constructor() {
     super();
     this.packageJsonParser = new PackageJsonParser();
     this.npmRegistryService = new NpmRegistryService();
+    this.osvService = new OsvService();
   }
 
   public async parseAllPackageJsonFiles() {
@@ -76,6 +79,14 @@ export class DependencyScanner extends BaseDependencyScanner {
     let totalDependencies = 0;
     let outdatedPackages = 0;
     let unknownLicensePackages = 0;
+    let vulnerablePackages = 0;
+    const vulnerabilityBreakdown = {
+      low: 0,
+      medium: 0,
+      high: 0,
+      critical: 0,
+      unknown: 0,
+    };
 
     const uniquePackages = new Map<
       string,
@@ -98,9 +109,21 @@ export class DependencyScanner extends BaseDependencyScanner {
         Array.from(uniquePackages.values())
       );
 
+    const npmPackages = Array.from(uniquePackages.values()).map((pkg) => ({
+      name: pkg.name,
+      version: pkg.version || "latest",
+      ecosystem: "npm",
+    }));
+
+    const vulnerabilityMap = await this.osvService.checkMultipleVulnerabilities(
+      npmPackages
+    );
+
     const packagesWithMetadata = packages.map((pkg) => {
       const dependenciesWithMetadata = pkg.dependencies.map((dep) => {
         const metadata = metadataMap.get(dep.name);
+        const vulnerabilities = vulnerabilityMap.get(dep.name) || [];
+
         if (metadata) {
           if (metadata.isOutdated) {
             outdatedPackages++;
@@ -108,12 +131,50 @@ export class DependencyScanner extends BaseDependencyScanner {
           if (metadata.hasUnknownLicense) {
             unknownLicensePackages++;
           }
+
+          metadata.vulnerabilities = vulnerabilities;
+          metadata.hasVulnerabilities = vulnerabilities.length > 0;
+          metadata.vulnerabilityCount = vulnerabilities.length;
+
+          if (vulnerabilities.length > 0) {
+            vulnerablePackages++;
+
+            let highestSeverity:
+              | "LOW"
+              | "MEDIUM"
+              | "HIGH"
+              | "CRITICAL"
+              | "UNKNOWN" = "UNKNOWN";
+            vulnerabilities.forEach((vuln) => {
+              vulnerabilityBreakdown[
+                vuln.severity.toLowerCase() as keyof typeof vulnerabilityBreakdown
+              ]++;
+
+              const severityOrder = {
+                UNKNOWN: 0,
+                LOW: 1,
+                MEDIUM: 2,
+                HIGH: 3,
+                CRITICAL: 4,
+              };
+              if (
+                severityOrder[vuln.severity] > severityOrder[highestSeverity]
+              ) {
+                highestSeverity = vuln.severity;
+              }
+            });
+            metadata.highestSeverity =
+              highestSeverity !== "UNKNOWN" ? highestSeverity : undefined;
+          }
         }
 
-        return {
+        const dependencyWithMetadata = {
           ...dep,
           metadata,
+          vulnerabilities,
         };
+
+        return dependencyWithMetadata;
       });
 
       totalDependencies += pkg.totalDependencies;
@@ -146,6 +207,8 @@ export class DependencyScanner extends BaseDependencyScanner {
       allDependencies,
       outdatedPackages,
       unknownLicensePackages,
+      vulnerablePackages,
+      vulnerabilityBreakdown,
     };
   }
 }

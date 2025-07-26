@@ -15,6 +15,7 @@ export {
   NpmRegistryService,
   INpmRegistryService,
 } from "./services/NpmRegistryService";
+export { OsvService, IOsvService } from "./services/OsvService";
 
 // Provider exports
 export { SafeDepsWebviewViewProvider } from "./providers/SafeDepsWebviewViewProvider";

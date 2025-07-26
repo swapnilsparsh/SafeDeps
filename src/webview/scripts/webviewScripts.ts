@@ -5,6 +5,7 @@ export const getWebviewJavaScript = (): string => {
         let isLoading = false;
         let lastData = null;
         let lastCommand = null;
+        let currentFilter = 'all'; // 'all', 'vulnerable', 'critical', 'high', 'medium', 'low'
 
         function scanDependencies() {
             if (isLoading) return;
@@ -60,6 +61,40 @@ export const getWebviewJavaScript = (): string => {
                     renderPackageJsonDependencies(lastData);
                 }
             }
+        }
+
+        function setVulnerabilityFilter(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(\`[data-filter="\${filter}"]\`).classList.add('active');
+
+            if (lastData && lastCommand === 'scanPackageJson') {
+                renderPackageJsonDependencies(lastData);
+            }
+        }
+
+        function shouldShowPackage(pkg) {
+            if (currentFilter === 'all') return true;
+            if (currentFilter === 'vulnerable') {
+                return pkg.dependencies.some(dep => dep.vulnerabilities && dep.vulnerabilities.length > 0);
+            }
+
+            const severityFilter = currentFilter.toUpperCase();
+            return pkg.dependencies.some(dep =>
+                dep.vulnerabilities && dep.vulnerabilities.some(vuln => vuln.severity === severityFilter)
+            );
+        }
+
+        function shouldShowDependency(dep) {
+            if (currentFilter === 'all') return true;
+            if (currentFilter === 'vulnerable') {
+                return dep.vulnerabilities && dep.vulnerabilities.length > 0;
+            }
+
+            const severityFilter = currentFilter.toUpperCase();
+            return dep.vulnerabilities && dep.vulnerabilities.some(vuln => vuln.severity === severityFilter);
         }
 
         function openFile(filePath) {
@@ -166,7 +201,8 @@ export const getWebviewJavaScript = (): string => {
                 return;
             }
 
-            const hasAlerts = summary.outdatedPackages > 0 || summary.unknownLicensePackages > 0;
+            const hasAlerts = summary.outdatedPackages > 0 || summary.unknownLicensePackages > 0 || summary.vulnerablePackages > 0;
+            const hasVulnerabilities = summary.vulnerablePackages > 0;
 
             let html = \`
                 <div class="summary">
@@ -178,16 +214,38 @@ export const getWebviewJavaScript = (): string => {
                         DevDependencies: \${summary.dependencyBreakdown.devDependencies}
                         \${summary.dependencyBreakdown.peerDependencies > 0 ? ' | Peer: ' + summary.dependencyBreakdown.peerDependencies : ''}
                         \${summary.dependencyBreakdown.optionalDependencies > 0 ? ' | Optional: ' + summary.dependencyBreakdown.optionalDependencies : ''}
+                        \${hasVulnerabilities ? \`<br><span class="vulnerability-warning">🚨 \${summary.vulnerablePackages} vulnerable package\${summary.vulnerablePackages !== 1 ? 's' : ''} found</span>\` : '<br>✅ No known vulnerabilities'}
                     </div>
+                    \${hasVulnerabilities ? \`
+                        <div class="vulnerability-stats">
+                            \${summary.vulnerabilityBreakdown.critical > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot critical"></span>Critical: \${summary.vulnerabilityBreakdown.critical}</div>\` : ''}
+                            \${summary.vulnerabilityBreakdown.high > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot high"></span>High: \${summary.vulnerabilityBreakdown.high}</div>\` : ''}
+                            \${summary.vulnerabilityBreakdown.medium > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot medium"></span>Medium: \${summary.vulnerabilityBreakdown.medium}</div>\` : ''}
+                            \${summary.vulnerabilityBreakdown.low > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot low"></span>Low: \${summary.vulnerabilityBreakdown.low}</div>\` : ''}
+                            \${summary.vulnerabilityBreakdown.unknown > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot unknown"></span>Unknown: \${summary.vulnerabilityBreakdown.unknown}</div>\` : ''}
+                        </div>
+                    \` : ''}
                     <div class="summary-alerts \${hasAlerts ? '' : 'hidden'}">
                         \${summary.outdatedPackages > 0 ? '⚠️ ' + summary.outdatedPackages + ' outdated package' + (summary.outdatedPackages !== 1 ? 's' : '') + ' (not updated in 1+ year)' : ''}
                         \${summary.unknownLicensePackages > 0 ? (summary.outdatedPackages > 0 ? '<br>' : '') + '❓ ' + summary.unknownLicensePackages + ' package' + (summary.unknownLicensePackages !== 1 ? 's' : '') + ' with unknown license' : ''}
+                        \${summary.vulnerablePackages > 0 ? (summary.outdatedPackages > 0 || summary.unknownLicensePackages > 0 ? '<br>' : '') + '🚨 ' + summary.vulnerablePackages + ' vulnerable package' + (summary.vulnerablePackages !== 1 ? 's' : '') : ''}
                     </div>
+                </div>
+                <div class="filter-bar">
+                    <span style="font-size: 11px; font-weight: 500;">Filter:</span>
+                    <button class="filter-button active" data-filter="all" onclick="setVulnerabilityFilter('all')">All</button>
+                    \${hasVulnerabilities ? \`<button class="filter-button" data-filter="vulnerable" onclick="setVulnerabilityFilter('vulnerable')">Vulnerable Only</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.critical > 0 ? \`<button class="filter-button" data-filter="critical" onclick="setVulnerabilityFilter('critical')">Critical (\${summary.vulnerabilityBreakdown.critical})</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.high > 0 ? \`<button class="filter-button" data-filter="high" onclick="setVulnerabilityFilter('high')">High (\${summary.vulnerabilityBreakdown.high})</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.medium > 0 ? \`<button class="filter-button" data-filter="medium" onclick="setVulnerabilityFilter('medium')">Medium (\${summary.vulnerabilityBreakdown.medium})</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.low > 0 ? \`<button class="filter-button" data-filter="low" onclick="setVulnerabilityFilter('low')">Low (\${summary.vulnerabilityBreakdown.low})</button>\` : ''}
                 </div>
                 <div class="dependency-files">
             \`;
 
             summary.packages.forEach(pkg => {
+                if (!shouldShowPackage(pkg)) return;
+
                 html += \`
                     <div class="language-group">
                         <div class="language-header" onclick="openFile('\${pkg.filePath.replace(/\\\\/g, '\\\\\\\\')}')">
@@ -207,7 +265,7 @@ export const getWebviewJavaScript = (): string => {
                 };
 
                 depTypes.forEach(type => {
-                    const depsOfType = pkg.dependencies.filter(dep => dep.type === type);
+                    const depsOfType = pkg.dependencies.filter(dep => dep.type === type && shouldShowDependency(dep));
                     if (depsOfType.length > 0) {
                         html += \`<div style="margin: 8px 0; padding-left: 16px;">
                             <div style="font-weight: 500; font-size: 12px; color: var(--vscode-titleBar-activeForeground); margin-bottom: 4px;">
@@ -225,9 +283,12 @@ export const getWebviewJavaScript = (): string => {
                             const metadata = dep.metadata;
                             let packageClasses = 'file-item';
                             let alertBadges = '';
+                            let vulnerabilityInfo = '';
 
                             if (metadata) {
-                                if (metadata.isOutdated && metadata.hasUnknownLicense) {
+                                if (metadata.hasVulnerabilities) {
+                                    packageClasses += ' vulnerable';
+                                } else if (metadata.isOutdated && metadata.hasUnknownLicense) {
                                     packageClasses += ' critical';
                                 } else if (metadata.isOutdated) {
                                     packageClasses += ' outdated';
@@ -241,6 +302,25 @@ export const getWebviewJavaScript = (): string => {
                                 if (metadata.hasUnknownLicense) {
                                     alertBadges += '<span class="metadata-badge unknown-license">NO LICENSE</span>';
                                 }
+                                if (metadata.hasVulnerabilities) {
+                                    alertBadges += \`<span class="vulnerability-badge \${metadata.highestSeverity?.toLowerCase() || 'unknown'}">\${metadata.highestSeverity || 'VULN'}</span>\`;
+                                    if (metadata.vulnerabilityCount > 1) {
+                                        alertBadges += \`<span class="vulnerability-count">\${metadata.vulnerabilityCount}</span>\`;
+                                    }
+                                }
+
+                                if (dep.vulnerabilities && dep.vulnerabilities.length > 0) {
+                                    vulnerabilityInfo = '<div class="vulnerability-details">';
+                                    dep.vulnerabilities.forEach(vuln => {
+                                        vulnerabilityInfo += \`
+                                            <div class="vulnerability-item">
+                                                <div class="vulnerability-cve">\${vuln.id} \${vuln.cveIds.length > 0 ? '(' + vuln.cveIds.join(', ') + ')' : ''}</div>
+                                                <div class="vulnerability-summary">\${vuln.summary}</div>
+                                            </div>
+                                        \`;
+                                    });
+                                    vulnerabilityInfo += '</div>';
+                                }
                             }
 
                             html += \`
@@ -253,6 +333,7 @@ export const getWebviewJavaScript = (): string => {
                                         </div>
                                         <div class="file-path">\${dep.version}</div>
                                         \${metadata ? renderPackageMetadata(metadata) : '<div class="package-metadata">Loading metadata...</div>'}
+                                        \${vulnerabilityInfo}
                                     </div>
                                 </div>
                             \`;

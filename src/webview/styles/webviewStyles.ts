@@ -192,5 +192,128 @@ export const getWebviewStyles = (): string => {
         .summary-alerts.hidden {
             display: none;
         }
+        .vulnerability-badge {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-left: 4px;
+            text-transform: uppercase;
+        }
+        .vulnerability-badge.critical {
+            background-color: #dc3545;
+            color: white;
+        }
+        .vulnerability-badge.high {
+            background-color: #fd7e14;
+            color: white;
+        }
+        .vulnerability-badge.medium {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .vulnerability-badge.low {
+            background-color: #28a745;
+            color: white;
+        }
+        .vulnerability-badge.unknown {
+            background-color: #6c757d;
+            color: white;
+        }
+        .vulnerability-warning {
+            color: #dc3545;
+            font-weight: 600;
+        }
+        .vulnerability-count {
+            background-color: #dc3545;
+            color: white;
+            border-radius: 50%;
+            padding: 2px 6px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-left: 6px;
+            min-width: 16px;
+            text-align: center;
+            display: inline-block;
+        }
+        .vulnerability-details {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            margin-top: 4px;
+            padding: 4px 0;
+            border-top: 1px solid var(--vscode-panel-border);
+        }
+        .vulnerability-item {
+            margin: 2px 0;
+            padding: 2px 4px;
+            background-color: rgba(220, 53, 69, 0.1);
+            border-radius: 2px;
+        }
+        .vulnerability-cve {
+            font-family: monospace;
+            font-size: 10px;
+            color: var(--vscode-textLink-foreground);
+        }
+        .vulnerability-summary {
+            font-size: 10px;
+            margin-top: 1px;
+            color: var(--vscode-descriptionForeground);
+        }
+        .package-item.vulnerable {
+            border-left-color: #dc3545;
+            background-color: rgba(220, 53, 69, 0.05);
+        }
+        .filter-bar {
+            margin-bottom: 16px;
+            padding: 8px;
+            background-color: var(--vscode-textBlockQuote-background);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .filter-button {
+            padding: 4px 8px;
+            border: 1px solid var(--vscode-panel-border);
+            background-color: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+        .filter-button.active {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border-color: var(--vscode-button-background);
+        }
+        .filter-button:hover {
+            background-color: var(--vscode-button-hoverBackground);
+            color: var(--vscode-button-foreground);
+        }
+        .vulnerability-stats {
+            font-size: 11px;
+            margin-top: 4px;
+            color: var(--vscode-descriptionForeground);
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .vulnerability-stat {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .vulnerability-stat-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+        }
+        .vulnerability-stat-dot.critical { background-color: #dc3545; }
+        .vulnerability-stat-dot.high { background-color: #fd7e14; }
+        .vulnerability-stat-dot.medium { background-color: #ffc107; }
+        .vulnerability-stat-dot.low { background-color: #28a745; }
+        .vulnerability-stat-dot.unknown { background-color: #6c757d; }
     `;
 };

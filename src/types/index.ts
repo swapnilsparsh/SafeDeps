@@ -31,6 +31,33 @@ export interface PackageDependency {
     | "devDependency"
     | "peerDependency"
     | "optionalDependency";
+  vulnerabilities?: VulnerabilityInfo[];
+}
+
+export interface VulnerabilityInfo {
+  id: string;
+  summary: string;
+  details: string;
+  severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL" | "UNKNOWN";
+  cveIds: string[];
+  published?: Date;
+  modified?: Date;
+  aliases: string[];
+  databaseSpecific: any;
+  references: { type: string; url: string }[];
+  affected: any[];
+}
+
+export interface OsvQueryRequest {
+  package: {
+    name: string;
+    ecosystem: string;
+  };
+  version?: string;
+}
+
+export interface OsvVulnerabilityResponse {
+  vul?: any[];
 }
 
 export interface PackageJsonInfo {
@@ -67,6 +94,10 @@ export interface PackageMetadata {
   repository: string;
   isOutdated: boolean;
   hasUnknownLicense: boolean;
+  vulnerabilities?: VulnerabilityInfo[];
+  hasVulnerabilities?: boolean;
+  vulnerabilityCount?: number;
+  highestSeverity?: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 }
 
 export interface PackageDependencyWithMetadata extends PackageDependency {
@@ -96,6 +127,14 @@ export interface PackageJsonSummaryWithMetadata {
   }[];
   outdatedPackages: number;
   unknownLicensePackages: number;
+  vulnerablePackages: number;
+  vulnerabilityBreakdown: {
+    low: number;
+    medium: number;
+    high: number;
+    critical: number;
+    unknown: number;
+  };
 }
 
 export interface NpmRegistryResponse {
