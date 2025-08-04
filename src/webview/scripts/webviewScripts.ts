@@ -35,10 +35,25 @@ export const getWebviewJavaScript = (): string => {
             vscode.postMessage({ command: 'scanPackageJson' });
         }
 
+        function scanAllEcosystems() {
+            if (isLoading) return;
+
+            setLoadingState(true);
+            lastCommand = 'scanAllEcosystems';
+            document.getElementById('content').innerHTML = \`
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                    <div>Scanning all ecosystems and checking vulnerabilities...</div>
+                </div>
+            \`;
+            vscode.postMessage({ command: 'scanAllEcosystems' });
+        }
+
         function setLoadingState(loading) {
             isLoading = loading;
             const scanButton = document.querySelector('button[onclick="scanDependencies()"]');
             const packageButton = document.querySelector('button[onclick="scanPackageJson()"]');
+            const allEcosystemsButton = document.querySelector('button[onclick="scanAllEcosystems()"]');
 
             if (scanButton) {
                 scanButton.disabled = loading;
@@ -51,6 +66,12 @@ export const getWebviewJavaScript = (): string => {
                 packageButton.style.opacity = loading ? '0.6' : '1';
                 packageButton.style.cursor = loading ? 'not-allowed' : 'pointer';
             }
+
+            if (allEcosystemsButton) {
+                allEcosystemsButton.disabled = loading;
+                allEcosystemsButton.style.opacity = loading ? '0.6' : '1';
+                allEcosystemsButton.style.cursor = loading ? 'not-allowed' : 'pointer';
+            }
         }
 
         function restoreLastData() {
@@ -59,6 +80,8 @@ export const getWebviewJavaScript = (): string => {
                     renderDependencies(lastData);
                 } else if (lastCommand === 'scanPackageJson') {
                     renderPackageJsonDependencies(lastData);
+                } else if (lastCommand === 'scanAllEcosystems') {
+                    renderAllEcosystemsDependencies(lastData);
                 }
             }
         }
@@ -113,6 +136,32 @@ export const getWebviewJavaScript = (): string => {
                 'composer.json': '🐘'
             };
             return icons[type] || '📄';
+        }
+
+        function getEcosystemIcon(ecosystem) {
+            const icons = {
+                'npm': '📦',
+                'PyPI': '🐍',
+                'Go': '🐹',
+                'crates.io': '🦀',
+                'Maven': '☕',
+                'RubyGems': '💎',
+                'Packagist': '🐘'
+            };
+            return icons[ecosystem] || '📄';
+        }
+
+        function getEcosystemColor(ecosystem) {
+            const colors = {
+                'npm': '#cb3837',
+                'PyPI': '#3776ab',
+                'Go': '#00add8',
+                'crates.io': '#ce422b',
+                'Maven': '#f89820',
+                'RubyGems': '#cc342d',
+                'Packagist': '#4f5d95'
+            };
+            return colors[ecosystem] || '#666666';
         }
 
         function renderDependencies(summary) {
@@ -419,6 +468,96 @@ export const getWebviewJavaScript = (): string => {
             \`;
         }
 
+        function renderAllEcosystemsDependencies(summary) {
+            setLoadingState(false);
+            lastData = summary;
+            lastCommand = 'scanAllEcosystems';
+
+            const content = document.getElementById('content');
+
+            if (summary.totalFiles === 0) {
+                content.innerHTML = \`
+                    <div class="empty-state">
+                        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <div>No dependency files found in workspace</div>
+                    </div>
+                \`;
+                return;
+            }
+
+            const hasVulnerabilities = summary.vulnerablePackages > 0;
+
+            let html = \`
+                <div class="summary">
+                    <div class="summary-title">Multi-Ecosystem Analysis</div>
+                    <div class="summary-stats">
+                        Found \${summary.totalDependencies} dependencies across \${summary.totalFiles} file\${summary.totalFiles !== 1 ? 's' : ''}
+                        <br>
+                        Ecosystems: \${Object.entries(summary.ecosystemBreakdown).map(([eco, count]) => \`\${getEcosystemIcon(eco)} \${eco}: \${count}\`).join(' | ')}
+                        \${hasVulnerabilities ? \`<br><span class="vulnerability-warning">🚨 \${summary.vulnerablePackages} vulnerable package\${summary.vulnerablePackages !== 1 ? 's' : ''} found</span>\` : '<br>✅ No known vulnerabilities'}
+                    </div>
+                    \${hasVulnerabilities ? \`
+                        <div class="vulnerability-stats">
+                            \${summary.vulnerabilityBreakdown.critical > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot critical"></span>Critical: \${summary.vulnerabilityBreakdown.critical}</div>\` : ''}
+                            \${summary.vulnerabilityBreakdown.high > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot high"></span>High: \${summary.vulnerabilityBreakdown.high}</div>\` : ''}
+                            \${summary.vulnerabilityBreakdown.medium > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot medium"></span>Medium: \${summary.vulnerabilityBreakdown.medium}</div>\` : ''}
+                            \${summary.vulnerabilityBreakdown.low > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot low"></span>Low: \${summary.vulnerabilityBreakdown.low}</div>\` : ''}
+                            \${summary.vulnerabilityBreakdown.unknown > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot unknown"></span>Unknown: \${summary.vulnerabilityBreakdown.unknown}</div>\` : ''}
+                        </div>
+                    \` : ''}
+                </div>
+                <div class="dependency-files">
+            \`;
+
+            const filesByEcosystem = {};
+            summary.files.forEach(fileData => {
+                const ecosystem = fileData.file.ecosystem;
+                if (!filesByEcosystem[ecosystem]) {
+                    filesByEcosystem[ecosystem] = [];
+                }
+                filesByEcosystem[ecosystem].push(fileData);
+            });
+
+            Object.keys(filesByEcosystem).sort().forEach(ecosystem => {
+                const files = filesByEcosystem[ecosystem];
+                const ecosystemColor = getEcosystemColor(ecosystem);
+
+                html += \`
+                    <div class="language-group">
+                        <div class="language-header" style="border-left: 4px solid \${ecosystemColor}; padding-left: 8px;">
+                            \${getEcosystemIcon(ecosystem)} \${ecosystem} (\${files.length} file\${files.length !== 1 ? 's' : ''})
+                        </div>
+                \`;
+
+                files.forEach(fileData => {
+                    const file = fileData.file;
+                    const totalDeps = fileData.dependencies.length;
+                    const vulnerableDeps = fileData.dependencies.filter(dep => dep.vulnerabilities && dep.vulnerabilities.length > 0);
+
+                    html += \`
+                        <div class="file-item" onclick="openFile('\${file.filePath.replace(/\\\\/g, '\\\\\\\\')}')">
+                            <span class="file-icon">\${getFileIcon(file.type)}</span>
+                            <div>
+                                <div class="file-name">\${file.type}</div>
+                                <div class="file-path">\${file.relativePath}</div>
+                                <div class="package-metadata">
+                                    \${totalDeps} dependencies
+                                    \${vulnerableDeps.length > 0 ? \`<span class="vulnerability-warning"> • \${vulnerableDeps.length} vulnerable</span>\` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    \`;
+                });
+
+                html += '</div>';
+            });
+
+            html += '</div>';
+            content.innerHTML = html;
+        }
+
         // Handle messages from the extension
         window.addEventListener('message', event => {
             const message = event.data;
@@ -428,6 +567,9 @@ export const getWebviewJavaScript = (): string => {
                     break;
                 case 'updatePackageJsonDependencies':
                     renderPackageJsonDependencies(message.data);
+                    break;
+                case 'updateAllEcosystemsDependencies':
+                    renderAllEcosystemsDependencies(message.data);
                     break;
                 case 'showError':
                     showError(message.error);

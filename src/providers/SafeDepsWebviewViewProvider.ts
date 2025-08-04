@@ -39,6 +39,9 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
         case "scanPackageJson":
           this._scanPackageJsonDependencies();
           break;
+        case "scanAllEcosystems":
+          this._scanAllEcosystemsDependencies();
+          break;
         case "openFile":
           this._openFile(message.filePath);
           break;
@@ -63,11 +66,14 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
 
   private _restoreLastData(): void {
     if (this._view && this._lastScanResult && this._lastCommand) {
+      let updateCommand = "updateDependencies";
+      if (this._lastCommand === "scanPackageJson") {
+        updateCommand = "updatePackageJsonDependencies";
+      } else if (this._lastCommand === "scanAllEcosystems") {
+        updateCommand = "updateAllEcosystemsDependencies";
+      }
       this._view.webview.postMessage({
-        command:
-          this._lastCommand === "scanDependencies"
-            ? "updateDependencies"
-            : "updatePackageJsonDependencies",
+        command: updateCommand,
         data: this._lastScanResult,
       });
     }
@@ -111,6 +117,27 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
       });
     } catch (error) {
       this._handleError("Failed to scan package.json dependencies", error);
+    }
+  }
+
+  private async _scanAllEcosystemsDependencies(): Promise<void> {
+    if (!this._view) {
+      return;
+    }
+
+    try {
+      const summary =
+        await this._dependencyScanner.getUnifiedDependencySummaryWithVulnerabilities();
+
+      this._lastScanResult = summary;
+      this._lastCommand = "scanAllEcosystems";
+
+      this._view.webview.postMessage({
+        command: "updateAllEcosystemsDependencies",
+        data: summary,
+      });
+    } catch (error) {
+      this._handleError("Failed to scan all ecosystems dependencies", error);
     }
   }
 

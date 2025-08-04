@@ -48,6 +48,7 @@ export class BaseDependencyScanner implements IDependencyScanner {
           dependencyFiles.push({
             type: fileConfig.type,
             language: fileConfig.language,
+            ecosystem: fileConfig.ecosystem,
             filePath: fileUri.fsPath,
             relativePath: relativePath,
             workspaceFolder: workspaceFolder,

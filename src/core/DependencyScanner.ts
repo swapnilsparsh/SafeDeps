@@ -1,17 +1,20 @@
 import { PackageJsonSummary, PackageJsonSummaryWithMetadata } from "../types";
 import { BaseDependencyScanner } from "./BaseDependencyScanner";
 import { PackageJsonParser } from "../parsers/PackageJsonParser";
+import { UnifiedDependencyParser } from "../parsers/UnifiedDependencyParser";
 import { NpmRegistryService } from "../services/NpmRegistryService";
 import { OsvService } from "../services/OsvService";
 
 export class DependencyScanner extends BaseDependencyScanner {
   private packageJsonParser: PackageJsonParser;
+  private unifiedParser: UnifiedDependencyParser;
   private npmRegistryService: NpmRegistryService;
   private osvService: OsvService;
 
   constructor() {
     super();
     this.packageJsonParser = new PackageJsonParser();
+    this.unifiedParser = new UnifiedDependencyParser();
     this.npmRegistryService = new NpmRegistryService();
     this.osvService = new OsvService();
   }
@@ -19,6 +22,32 @@ export class DependencyScanner extends BaseDependencyScanner {
   public async parseAllPackageJsonFiles() {
     const packageJsonFiles = await this.scanForFileType("package.json");
     return this.packageJsonParser.parseAllPackageJsonFiles(packageJsonFiles);
+  }
+
+  public async parseAllDependencyFiles() {
+    const allFiles = await this.scanWorkspace();
+    const allDependencies: {
+      file: import("../types").DependencyFile;
+      dependencies: import("../types").PackageDependency[];
+    }[] = [];
+
+    for (const file of allFiles) {
+      try {
+        const dependencies = await this.unifiedParser.parseFile(file);
+        allDependencies.push({
+          file,
+          dependencies,
+        });
+      } catch (error) {
+        console.error(`Error parsing ${file.filePath}:`, error);
+        allDependencies.push({
+          file,
+          dependencies: [],
+        });
+      }
+    }
+
+    return allDependencies;
   }
 
   public async getPackageJsonSummary(): Promise<PackageJsonSummary> {
@@ -209,6 +238,99 @@ export class DependencyScanner extends BaseDependencyScanner {
       unknownLicensePackages,
       vulnerablePackages,
       vulnerabilityBreakdown,
+    };
+  }
+
+  public async getUnifiedDependencySummaryWithVulnerabilities() {
+    const allFiles = await this.parseAllDependencyFiles();
+    let totalDependencies = 0;
+    let vulnerablePackages = 0;
+    const ecosystemBreakdown: Record<string, number> = {};
+    const vulnerabilityBreakdown = {
+      low: 0,
+      medium: 0,
+      high: 0,
+      critical: 0,
+      unknown: 0,
+    };
+
+    const uniquePackages = new Map<
+      string,
+      { name: string; version: string; ecosystem: string }
+    >();
+    const allDependencies: {
+      file: import("../types").DependencyFile;
+      dependency: import("../types").PackageDependency;
+    }[] = [];
+
+    for (const fileData of allFiles) {
+      for (const dep of fileData.dependencies) {
+        const key = `${dep.ecosystem}:${dep.name}`;
+        if (!uniquePackages.has(key)) {
+          uniquePackages.set(key, {
+            name: dep.name,
+            version: dep.version,
+            ecosystem: dep.ecosystem,
+          });
+        }
+
+        totalDependencies++;
+        ecosystemBreakdown[dep.ecosystem] =
+          (ecosystemBreakdown[dep.ecosystem] || 0) + 1;
+
+        allDependencies.push({
+          file: fileData.file,
+          dependency: dep,
+        });
+      }
+    }
+
+    const vulnerabilityMap = await this.osvService.checkMultipleVulnerabilities(
+      Array.from(uniquePackages.values())
+    );
+
+    const filesWithVulnerabilities = allFiles.map((fileData) => {
+      const dependenciesWithVulnerabilities = fileData.dependencies.map(
+        (dep) => {
+          const vulnerabilities = vulnerabilityMap.get(dep.name) || [];
+
+          if (vulnerabilities.length > 0) {
+            vulnerablePackages++;
+
+            vulnerabilities.forEach((vuln) => {
+              vulnerabilityBreakdown[
+                vuln.severity.toLowerCase() as keyof typeof vulnerabilityBreakdown
+              ]++;
+            });
+          }
+
+          return {
+            ...dep,
+            vulnerabilities,
+          };
+        }
+      );
+
+      return {
+        ...fileData,
+        dependencies: dependenciesWithVulnerabilities,
+      };
+    });
+
+    return {
+      totalFiles: allFiles.length,
+      totalDependencies,
+      ecosystemBreakdown,
+      vulnerablePackages,
+      vulnerabilityBreakdown,
+      files: filesWithVulnerabilities,
+      allDependencies: allDependencies.map((item) => ({
+        file: item.file,
+        dependency: {
+          ...item.dependency,
+          vulnerabilities: vulnerabilityMap.get(item.dependency.name) || [],
+        },
+      })),
     };
   }
 }

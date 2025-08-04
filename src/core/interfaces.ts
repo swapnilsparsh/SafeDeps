@@ -3,6 +3,7 @@ import {
   DependencyFile,
   DependencyFileType,
   DependencyLanguage,
+  DependencyEcosystem,
 } from "../types";
 
 export interface IDependencyScanner {
@@ -18,4 +19,5 @@ export interface IScanConfig {
   pattern: string;
   type: DependencyFileType;
   language: DependencyLanguage;
+  ecosystem: DependencyEcosystem;
 }

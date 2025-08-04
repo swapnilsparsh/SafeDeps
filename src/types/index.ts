@@ -18,6 +18,14 @@ export interface DependencyFile {
     | "Java"
     | "Ruby"
     | "PHP";
+  ecosystem:
+    | "npm"
+    | "PyPI"
+    | "Go"
+    | "crates.io"
+    | "Maven"
+    | "RubyGems"
+    | "Packagist";
   filePath: string;
   relativePath: string;
   workspaceFolder: vscode.WorkspaceFolder;
@@ -31,6 +39,7 @@ export interface PackageDependency {
     | "devDependency"
     | "peerDependency"
     | "optionalDependency";
+  ecosystem: string;
   vulnerabilities?: VulnerabilityInfo[];
 }
 
@@ -173,3 +182,4 @@ export interface NpmRegistryResponse {
 
 export type DependencyFileType = DependencyFile["type"];
 export type DependencyLanguage = DependencyFile["language"];
+export type DependencyEcosystem = DependencyFile["ecosystem"];

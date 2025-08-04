@@ -9,6 +9,15 @@ export {
   PackageJsonParser,
   IPackageJsonParser,
 } from "./parsers/PackageJsonParser";
+export {
+  UnifiedDependencyParser,
+  IUnifiedDependencyParser,
+} from "./parsers/UnifiedDependencyParser";
+export { BaseDependencyParser } from "./parsers/BaseDependencyParser";
+export { NpmPackageParser } from "./parsers/NpmPackageParser";
+export { PythonRequirementsParser } from "./parsers/PythonRequirementsParser";
+export { GoModParser } from "./parsers/GoModParser";
+export { CargoTomlParser } from "./parsers/CargoTomlParser";
 
 // Service exports
 export {
