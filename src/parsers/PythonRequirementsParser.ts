@@ -48,25 +48,43 @@ export class PythonRequirementsParser
   }
 
   private parseDependencyLine(line: string): PackageDependency | null {
+    // Remove extras like [dev] from package names
     const cleanLine = line.replace(/\[.*?\]/g, "");
 
-    const match = cleanLine.match(
-      /^([a-zA-Z0-9\-_.]+)(?:(==|>=|<=|>|<|~=|!=)(.+))?$/
-    );
+    // Handle different requirement formats
+    const patterns = [
+      // Standard format: package==1.0.0, package>=1.0.0, etc.
+      /^([a-zA-Z0-9\-_.]+)(?:(==|>=|<=|>|<|~=|!=)(.+))?$/,
+      // Git URLs
+      /^git\+https?:\/\/.*#egg=([a-zA-Z0-9\-_.]+)/,
+      // Local paths
+      /^\.\/.*#egg=([a-zA-Z0-9\-_.]+)/,
+    ];
 
-    if (!match) {
-      return null;
+    for (const pattern of patterns) {
+      const match = cleanLine.match(pattern);
+      if (match) {
+        const [, name, operator, versionSpec] = match;
+
+        // Skip git and local dependencies for vulnerability checking
+        if (cleanLine.includes("git+") || cleanLine.includes("./")) {
+          return null;
+        }
+
+        const version =
+          operator && versionSpec
+            ? `${operator}${versionSpec.trim()}`
+            : "latest";
+
+        return this.createDependency(
+          name.trim(),
+          version,
+          "dependency",
+          this.getEcosystem()
+        );
+      }
     }
 
-    const [, name, operator, versionSpec] = match;
-    const version =
-      operator && versionSpec ? `${operator}${versionSpec.trim()}` : "latest";
-
-    return this.createDependency(
-      name.trim(),
-      version,
-      "dependency",
-      this.getEcosystem()
-    );
+    return null;
   }
 }

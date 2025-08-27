@@ -1,4 +1,5 @@
 import { PackageMetadata, NpmRegistryResponse } from "../types";
+import { BaseRegistryService } from "./BaseRegistryService";
 
 export interface INpmRegistryService {
   fetchPackageMetadata(
@@ -10,15 +11,21 @@ export interface INpmRegistryService {
   ): Promise<Map<string, PackageMetadata>>;
 }
 
-export class NpmRegistryService implements INpmRegistryService {
+export class NpmRegistryService
+  extends BaseRegistryService
+  implements INpmRegistryService
+{
   private readonly NPM_REGISTRY_URL = "https://registry.npmjs.org";
-  private cache = new Map<string, PackageMetadata>();
+
+  public getEcosystem(): string {
+    return "npm";
+  }
 
   public async fetchPackageMetadata(
     packageName: string,
     version?: string
   ): Promise<PackageMetadata> {
-    const cacheKey = `${packageName}@${version || "latest"}`;
+    const cacheKey = this.getCacheKey(packageName, version);
 
     if (this.cache.has(cacheKey)) {
       return this.cache.get(cacheKey)!;
@@ -73,63 +80,13 @@ export class NpmRegistryService implements INpmRegistryService {
     } catch (error) {
       console.error(`Error fetching metadata for ${packageName}:`, error);
 
-      return {
-        name: packageName,
-        version: version || "unknown",
-        license: "Unknown",
-        lastUpdated: new Date(0),
-        size: 0,
-        description: "",
-        author: "",
-        homepage: "",
-        repository: "",
-        isOutdated: true,
-        hasUnknownLicense: true,
-      };
+      const defaultMetadata = this.createDefaultMetadata(
+        packageName,
+        version || "latest"
+      );
+      this.cache.set(cacheKey, defaultMetadata);
+      return defaultMetadata;
     }
-  }
-
-  public async fetchMultiplePackageMetadata(
-    packages: { name: string; version?: string }[]
-  ): Promise<Map<string, PackageMetadata>> {
-    const results = new Map<string, PackageMetadata>();
-
-    const batchSize = 5;
-    for (let i = 0; i < packages.length; i += batchSize) {
-      const batch = packages.slice(i, i + batchSize);
-      const promises = batch.map(async (pkg) => {
-        try {
-          const metadata = await this.fetchPackageMetadata(
-            pkg.name,
-            pkg.version
-          );
-          results.set(pkg.name, metadata);
-        } catch (error) {
-          console.error(`Failed to fetch metadata for ${pkg.name}:`, error);
-          results.set(pkg.name, {
-            name: pkg.name,
-            version: pkg.version || "unknown",
-            license: "Unknown",
-            lastUpdated: new Date(0),
-            size: 0,
-            description: "",
-            author: "",
-            homepage: "",
-            repository: "",
-            isOutdated: true,
-            hasUnknownLicense: true,
-          });
-        }
-      });
-
-      await Promise.all(promises);
-
-      if (i + batchSize < packages.length) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-    }
-
-    return results;
   }
 
   private extractLicense(license: any): string {

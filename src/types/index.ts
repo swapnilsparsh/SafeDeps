@@ -146,6 +146,38 @@ export interface PackageJsonSummaryWithMetadata {
   };
 }
 
+export interface UnifiedDependencySummary {
+  totalFiles: number;
+  totalDependencies: number;
+  ecosystemBreakdown: Record<string, number>;
+  vulnerablePackages: number;
+  outdatedPackages: number;
+  unknownLicensePackages: number;
+  vulnerabilityBreakdown: {
+    low: number;
+    medium: number;
+    high: number;
+    critical: number;
+    unknown: number;
+  };
+  files: Array<{
+    file: DependencyFile;
+    dependencies: Array<
+      PackageDependency & {
+        vulnerabilities: VulnerabilityInfo[];
+        metadata?: PackageMetadata;
+      }
+    >;
+  }>;
+  allDependencies: Array<{
+    file: DependencyFile;
+    dependency: PackageDependency & {
+      vulnerabilities: VulnerabilityInfo[];
+      metadata?: PackageMetadata;
+    };
+  }>;
+}
+
 export interface NpmRegistryResponse {
   name: string;
   "dist-tags": {

@@ -42,6 +42,24 @@ export const getWebviewStyles = (): string => {
         .scan-button:hover {
             background-color: var(--vscode-button-hoverBackground);
         }
+        .action-bar {
+            margin-bottom: 16px;
+            display: flex;
+            gap: 8px;
+        }
+        .action-button {
+            background-color: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border: 1px solid var(--vscode-panel-border);
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            flex: 1;
+        }
+        .action-button:hover {
+            background-color: var(--vscode-button-secondaryHoverBackground);
+        }
         .summary {
             margin-bottom: 20px;
             padding: 12px;
@@ -71,6 +89,26 @@ export const getWebviewStyles = (): string => {
             color: var(--vscode-titleBar-activeForeground);
             border-bottom: 1px solid var(--vscode-panel-border);
             cursor: pointer;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 8px;
+            min-height: 20px;
+        }
+        .language-header-content {
+            flex: 1;
+            min-width: 0; /* Allow content to shrink */
+        }
+        .toggle-icon {
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+            flex-shrink: 0; /* Prevent icon from shrinking */
+            margin-top: 2px; /* Align with first line of text */
+        }
+        .file-dependencies {
+            margin-left: 12px;
+            border-left: 2px solid var(--vscode-panel-border);
+            padding-left: 8px;
         }
         .file-item {
             display: flex;
@@ -223,6 +261,14 @@ export const getWebviewStyles = (): string => {
         .vulnerability-warning {
             color: #dc3545;
             font-weight: 600;
+        }
+        .outdated-warning {
+            color: #fd7e14;
+            font-weight: 500;
+        }
+        .license-warning {
+            color: #6c757d;
+            font-weight: 500;
         }
         .vulnerability-count {
             background-color: #dc3545;

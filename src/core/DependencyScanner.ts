@@ -1,21 +1,25 @@
-import { PackageJsonSummary, PackageJsonSummaryWithMetadata } from "../types";
+import {
+  PackageJsonSummary,
+  PackageJsonSummaryWithMetadata,
+  UnifiedDependencySummary,
+} from "../types";
 import { BaseDependencyScanner } from "./BaseDependencyScanner";
 import { PackageJsonParser } from "../parsers/PackageJsonParser";
 import { UnifiedDependencyParser } from "../parsers/UnifiedDependencyParser";
-import { NpmRegistryService } from "../services/NpmRegistryService";
+import { UnifiedRegistryService } from "../services/UnifiedRegistryService";
 import { OsvService } from "../services/OsvService";
 
 export class DependencyScanner extends BaseDependencyScanner {
   private packageJsonParser: PackageJsonParser;
   private unifiedParser: UnifiedDependencyParser;
-  private npmRegistryService: NpmRegistryService;
+  private unifiedRegistryService: UnifiedRegistryService;
   private osvService: OsvService;
 
   constructor() {
     super();
     this.packageJsonParser = new PackageJsonParser();
     this.unifiedParser = new UnifiedDependencyParser();
-    this.npmRegistryService = new NpmRegistryService();
+    this.unifiedRegistryService = new UnifiedRegistryService();
     this.osvService = new OsvService();
   }
 
@@ -134,8 +138,12 @@ export class DependencyScanner extends BaseDependencyScanner {
     }
 
     const metadataMap =
-      await this.npmRegistryService.fetchMultiplePackageMetadata(
-        Array.from(uniquePackages.values())
+      await this.unifiedRegistryService.fetchMultiplePackageMetadata(
+        Array.from(uniquePackages.values()).map((pkg) => ({
+          name: pkg.name,
+          version: pkg.version,
+          ecosystem: "npm",
+        }))
       );
 
     const npmPackages = Array.from(uniquePackages.values()).map((pkg) => ({
@@ -241,10 +249,12 @@ export class DependencyScanner extends BaseDependencyScanner {
     };
   }
 
-  public async getUnifiedDependencySummaryWithVulnerabilities() {
+  public async getUnifiedDependencySummaryWithVulnerabilities(): Promise<UnifiedDependencySummary> {
     const allFiles = await this.parseAllDependencyFiles();
     let totalDependencies = 0;
     let vulnerablePackages = 0;
+    let outdatedPackages = 0;
+    let unknownLicensePackages = 0;
     const ecosystemBreakdown: Record<string, number> = {};
     const vulnerabilityBreakdown = {
       low: 0,
@@ -285,35 +295,51 @@ export class DependencyScanner extends BaseDependencyScanner {
       }
     }
 
+    // Fetch metadata for all packages
+    const metadataMap =
+      await this.unifiedRegistryService.fetchMultiplePackageMetadata(
+        Array.from(uniquePackages.values())
+      );
+
     const vulnerabilityMap = await this.osvService.checkMultipleVulnerabilities(
       Array.from(uniquePackages.values())
     );
 
-    const filesWithVulnerabilities = allFiles.map((fileData) => {
-      const dependenciesWithVulnerabilities = fileData.dependencies.map(
-        (dep) => {
-          const vulnerabilities = vulnerabilityMap.get(dep.name) || [];
+    const filesWithMetadata = allFiles.map((fileData) => {
+      const dependenciesWithMetadata = fileData.dependencies.map((dep) => {
+        const vulnerabilities = vulnerabilityMap.get(dep.name) || [];
+        const metadata = metadataMap.get(dep.name);
 
-          if (vulnerabilities.length > 0) {
-            vulnerablePackages++;
+        if (vulnerabilities.length > 0) {
+          vulnerablePackages++;
 
-            vulnerabilities.forEach((vuln) => {
-              vulnerabilityBreakdown[
-                vuln.severity.toLowerCase() as keyof typeof vulnerabilityBreakdown
-              ]++;
-            });
-          }
-
-          return {
-            ...dep,
-            vulnerabilities,
-          };
+          vulnerabilities.forEach((vuln) => {
+            vulnerabilityBreakdown[
+              vuln.severity.toLowerCase() as keyof typeof vulnerabilityBreakdown
+            ]++;
+          });
         }
-      );
+
+        // Count outdated and unknown license packages
+        if (metadata) {
+          if (metadata.isOutdated) {
+            outdatedPackages++;
+          }
+          if (metadata.hasUnknownLicense) {
+            unknownLicensePackages++;
+          }
+        }
+
+        return {
+          ...dep,
+          vulnerabilities,
+          metadata,
+        };
+      });
 
       return {
         ...fileData,
-        dependencies: dependenciesWithVulnerabilities,
+        dependencies: dependenciesWithMetadata,
       };
     });
 
@@ -322,13 +348,16 @@ export class DependencyScanner extends BaseDependencyScanner {
       totalDependencies,
       ecosystemBreakdown,
       vulnerablePackages,
+      outdatedPackages,
+      unknownLicensePackages,
       vulnerabilityBreakdown,
-      files: filesWithVulnerabilities,
+      files: filesWithMetadata,
       allDependencies: allDependencies.map((item) => ({
         file: item.file,
         dependency: {
           ...item.dependency,
           vulnerabilities: vulnerabilityMap.get(item.dependency.name) || [],
+          metadata: metadataMap.get(item.dependency.name),
         },
       })),
     };

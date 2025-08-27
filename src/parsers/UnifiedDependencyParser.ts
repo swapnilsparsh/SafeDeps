@@ -3,6 +3,10 @@ import { NpmPackageParser } from "./NpmPackageParser";
 import { PythonRequirementsParser } from "./PythonRequirementsParser";
 import { GoModParser } from "./GoModParser";
 import { CargoTomlParser } from "./CargoTomlParser";
+import { PomXmlParser } from "./PomXmlParser";
+import { BuildGradleParser } from "./BuildGradleParser";
+import { GemfileParser } from "./GemfileParser";
+import { ComposerJsonParser } from "./ComposerJsonParser";
 import { BaseDependencyParser } from "./BaseDependencyParser";
 
 export interface IUnifiedDependencyParser {
@@ -20,6 +24,10 @@ export class UnifiedDependencyParser implements IUnifiedDependencyParser {
     this.parsers.set("requirements.txt", new PythonRequirementsParser());
     this.parsers.set("go.mod", new GoModParser());
     this.parsers.set("Cargo.toml", new CargoTomlParser());
+    this.parsers.set("pom.xml", new PomXmlParser());
+    this.parsers.set("build.gradle", new BuildGradleParser());
+    this.parsers.set("Gemfile", new GemfileParser());
+    this.parsers.set("composer.json", new ComposerJsonParser());
   }
 
   public async parseFile(

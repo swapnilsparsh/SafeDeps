@@ -31,13 +31,34 @@ export class OsvService implements IOsvService {
     }
 
     try {
+      // Clean version based on ecosystem
+      const cleanedVersion = this.cleanVersionForEcosystem(version, ecosystem);
+
+      // Skip if version is not suitable for vulnerability checking
+      if (
+        !cleanedVersion ||
+        cleanedVersion === "latest" ||
+        cleanedVersion === "git"
+      ) {
+        this.cache.set(cacheKey, []);
+        return [];
+      }
+
       const query: OsvQueryRequest = {
         package: {
           name: packageName,
           ecosystem: ecosystem,
         },
-        version: version,
+        version: cleanedVersion,
       };
+
+      console.log(
+        `[OSV Debug] Checking vulnerability for ${ecosystem}:${packageName}@${cleanedVersion}`
+      );
+      console.log(
+        `[OSV Debug] Original version: "${version}" -> Cleaned: "${cleanedVersion}"`
+      );
+      console.log(`[OSV Debug] Query object:`, JSON.stringify(query, null, 2));
 
       const response = await fetch(`${this.OSV_API_URL}/v1/query`, {
         method: "POST",
@@ -54,6 +75,18 @@ export class OsvService implements IOsvService {
       }
 
       const data = (await response.json()) as OsvVulnerabilityResponse;
+      console.log(
+        `[OSV Debug] API Response for ${packageName}: ${
+          data.vul?.length || 0
+        } vulnerabilities found`
+      );
+      if (data.vul && data.vul.length > 0) {
+        console.log(
+          `[OSV Debug] First vulnerability:`,
+          data.vul[0]?.id,
+          data.vul[0]?.summary?.substring(0, 100)
+        );
+      }
       const vulnerabilities = this.processVulnerabilities(data.vul || []);
 
       this.cache.set(cacheKey, vulnerabilities);
@@ -98,6 +131,63 @@ export class OsvService implements IOsvService {
     }
 
     return results;
+  }
+
+  private cleanVersionForEcosystem(version: string, ecosystem: string): string {
+    if (!version || version === "latest") {
+      return "";
+    }
+
+    let cleanedVersion = version.trim();
+
+    switch (ecosystem) {
+      case "PyPI":
+        // Remove Python version operators like >=, ==, ~=, etc.
+        cleanedVersion = cleanedVersion.replace(/^[><=~!]+\s*/, "");
+        // Handle version ranges - take the first version
+        if (cleanedVersion.includes(",")) {
+          cleanedVersion = cleanedVersion.split(",")[0].trim();
+        }
+        break;
+
+      case "crates.io":
+        // Remove Rust version specifiers like ^, ~, >=, etc.
+        cleanedVersion = cleanedVersion.replace(/^[\^~><=!]+\s*/, "");
+        // Handle version ranges
+        if (cleanedVersion.includes(",")) {
+          cleanedVersion = cleanedVersion.split(",")[0].trim();
+        }
+        break;
+
+      case "Go":
+        // Go versions sometimes have v prefix
+        if (cleanedVersion.startsWith("v")) {
+          cleanedVersion = cleanedVersion.substring(1);
+        }
+        break;
+
+      case "npm":
+        // Remove npm version specifiers like ^, ~, >=, etc.
+        cleanedVersion = cleanedVersion.replace(/^[\^~><=!]+\s*/, "");
+        // Handle version ranges
+        if (cleanedVersion.includes(" - ")) {
+          cleanedVersion = cleanedVersion.split(" - ")[0].trim();
+        }
+        if (cleanedVersion.includes(" || ")) {
+          cleanedVersion = cleanedVersion.split(" || ")[0].trim();
+        }
+        break;
+
+      default:
+        // Generic cleaning for other ecosystems
+        cleanedVersion = cleanedVersion.replace(/^[><=~!^]+\s*/, "");
+        break;
+    }
+
+    // Remove any remaining whitespace or quotes
+    cleanedVersion = cleanedVersion.replace(/["']/g, "").trim();
+
+    return cleanedVersion;
   }
 
   private processVulnerabilities(vul: any[]): VulnerabilityInfo[] {

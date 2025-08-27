@@ -98,6 +98,18 @@ export const getWebviewJavaScript = (): string => {
             }
         }
 
+        function setEcosystemFilter(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.filter-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(\`[data-filter="\${filter}"]\`).classList.add('active');
+
+            if (lastData && lastCommand === 'scanAllEcosystems') {
+                renderAllEcosystemsDependencies(lastData);
+            }
+        }
+
         function shouldShowPackage(pkg) {
             if (currentFilter === 'all') return true;
             if (currentFilter === 'vulnerable') {
@@ -115,6 +127,12 @@ export const getWebviewJavaScript = (): string => {
             if (currentFilter === 'vulnerable') {
                 return dep.vulnerabilities && dep.vulnerabilities.length > 0;
             }
+            if (currentFilter === 'outdated') {
+                return dep.metadata && dep.metadata.isOutdated;
+            }
+            if (currentFilter === 'unknown-license') {
+                return dep.metadata && dep.metadata.hasUnknownLicense;
+            }
 
             const severityFilter = currentFilter.toUpperCase();
             return dep.vulnerabilities && dep.vulnerabilities.some(vuln => vuln.severity === severityFilter);
@@ -122,6 +140,40 @@ export const getWebviewJavaScript = (): string => {
 
         function openFile(filePath) {
             vscode.postMessage({ command: 'openFile', filePath: filePath });
+        }
+
+        function toggleFileDetails(filePath) {
+            const sanitizedPath = filePath.replace(/[^a-zA-Z0-9]/g, '_');
+            const depsContainer = document.getElementById(\`deps-\${sanitizedPath}\`);
+            const toggleIcon = document.getElementById(\`toggle-\${sanitizedPath}\`);
+
+            if (depsContainer && toggleIcon) {
+                if (depsContainer.style.display === 'none') {
+                    depsContainer.style.display = 'block';
+                    toggleIcon.textContent = '▲';
+                } else {
+                    depsContainer.style.display = 'none';
+                    toggleIcon.textContent = '▼';
+                }
+            }
+        }
+
+        function expandAllFiles() {
+            document.querySelectorAll('.file-dependencies').forEach(container => {
+                container.style.display = 'block';
+            });
+            document.querySelectorAll('.toggle-icon').forEach(icon => {
+                icon.textContent = '▲';
+            });
+        }
+
+        function collapseAllFiles() {
+            document.querySelectorAll('.file-dependencies').forEach(container => {
+                container.style.display = 'none';
+            });
+            document.querySelectorAll('.toggle-icon').forEach(icon => {
+                icon.textContent = '▼';
+            });
         }
 
         function getFileIcon(type) {
@@ -298,9 +350,11 @@ export const getWebviewJavaScript = (): string => {
                 html += \`
                     <div class="language-group">
                         <div class="language-header" onclick="openFile('\${pkg.filePath.replace(/\\\\/g, '\\\\\\\\')}')">
-                            📦 \${pkg.packageName || 'package.json'} (\${pkg.totalDependencies} deps)
-                            <div style="font-size: 11px; color: var(--vscode-descriptionForeground); font-weight: normal;">
-                                \${pkg.relativePath}
+                            <div class="language-header-content">
+                                📦 \${pkg.packageName || 'package.json'} (\${pkg.totalDependencies} deps)
+                                <div style="font-size: 11px; color: var(--vscode-descriptionForeground); font-weight: normal;">
+                                    \${pkg.relativePath}
+                                </div>
                             </div>
                         </div>
                 \`;
@@ -488,6 +542,9 @@ export const getWebviewJavaScript = (): string => {
             }
 
             const hasVulnerabilities = summary.vulnerablePackages > 0;
+            const hasOutdated = summary.outdatedPackages > 0;
+            const hasUnknownLicense = summary.unknownLicensePackages > 0;
+            const hasAlerts = hasVulnerabilities || hasOutdated || hasUnknownLicense;
 
             let html = \`
                 <div class="summary">
@@ -507,6 +564,26 @@ export const getWebviewJavaScript = (): string => {
                             \${summary.vulnerabilityBreakdown.unknown > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot unknown"></span>Unknown: \${summary.vulnerabilityBreakdown.unknown}</div>\` : ''}
                         </div>
                     \` : ''}
+                    <div class="summary-alerts \${hasAlerts ? '' : 'hidden'}">
+                        \${hasOutdated ? '⚠️ ' + summary.outdatedPackages + ' outdated package' + (summary.outdatedPackages !== 1 ? 's' : '') : ''}
+                        \${hasUnknownLicense ? (hasOutdated ? '<br>' : '') + '❓ ' + summary.unknownLicensePackages + ' package' + (summary.unknownLicensePackages !== 1 ? 's' : '') + ' with unknown license' : ''}
+                        \${hasVulnerabilities ? (hasOutdated || hasUnknownLicense ? '<br>' : '') + '🚨 ' + summary.vulnerablePackages + ' vulnerable package' + (summary.vulnerablePackages !== 1 ? 's' : '') : ''}
+                    </div>
+                </div>
+                <div class="filter-bar">
+                    <span style="font-size: 11px; font-weight: 500;">Filter:</span>
+                    <button class="filter-button active" data-filter="all" onclick="setEcosystemFilter('all')">All</button>
+                    \${hasVulnerabilities ? \`<button class="filter-button" data-filter="vulnerable" onclick="setEcosystemFilter('vulnerable')">Vulnerable Only</button>\` : ''}
+                    \${hasOutdated ? \`<button class="filter-button" data-filter="outdated" onclick="setEcosystemFilter('outdated')">Outdated Only</button>\` : ''}
+                    \${hasUnknownLicense ? \`<button class="filter-button" data-filter="unknown-license" onclick="setEcosystemFilter('unknown-license')">Unknown License</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.critical > 0 ? \`<button class="filter-button" data-filter="critical" onclick="setEcosystemFilter('critical')">Critical (\${summary.vulnerabilityBreakdown.critical})</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.high > 0 ? \`<button class="filter-button" data-filter="high" onclick="setEcosystemFilter('high')">High (\${summary.vulnerabilityBreakdown.high})</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.medium > 0 ? \`<button class="filter-button" data-filter="medium" onclick="setEcosystemFilter('medium')">Medium (\${summary.vulnerabilityBreakdown.medium})</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.low > 0 ? \`<button class="filter-button" data-filter="low" onclick="setEcosystemFilter('low')">Low (\${summary.vulnerabilityBreakdown.low})</button>\` : ''}
+                </div>
+                <div class="action-bar">
+                    <button class="action-button" onclick="expandAllFiles()">📂 Expand All</button>
+                    <button class="action-button" onclick="collapseAllFiles()">📁 Collapse All</button>
                 </div>
                 <div class="dependency-files">
             \`;
@@ -533,22 +610,126 @@ export const getWebviewJavaScript = (): string => {
 
                 files.forEach(fileData => {
                     const file = fileData.file;
-                    const totalDeps = fileData.dependencies.length;
-                    const vulnerableDeps = fileData.dependencies.filter(dep => dep.vulnerabilities && dep.vulnerabilities.length > 0);
+                    const allDeps = fileData.dependencies;
+                    const filteredDeps = allDeps.filter(dep => shouldShowDependency(dep));
+
+                    // Skip files with no matching dependencies when filtering
+                    if (currentFilter !== 'all' && filteredDeps.length === 0) {
+                        return;
+                    }
+
+                    const totalDeps = allDeps.length;
+                    const vulnerableDeps = allDeps.filter(dep => dep.vulnerabilities && dep.vulnerabilities.length > 0);
+                    const outdatedDeps = allDeps.filter(dep => dep.metadata && dep.metadata.isOutdated);
+                    const unknownLicenseDeps = allDeps.filter(dep => dep.metadata && dep.metadata.hasUnknownLicense);
 
                     html += \`
-                        <div class="file-item" onclick="openFile('\${file.filePath.replace(/\\\\/g, '\\\\\\\\')}')">
-                            <span class="file-icon">\${getFileIcon(file.type)}</span>
-                            <div>
-                                <div class="file-name">\${file.type}</div>
-                                <div class="file-path">\${file.relativePath}</div>
-                                <div class="package-metadata">
-                                    \${totalDeps} dependencies
-                                    \${vulnerableDeps.length > 0 ? \`<span class="vulnerability-warning"> • \${vulnerableDeps.length} vulnerable</span>\` : ''}
+                        <div class="language-group">
+                            <div class="language-header" onclick="toggleFileDetails('\${file.filePath.replace(/\\\\/g, '\\\\\\\\')}')">
+                                <div class="language-header-content">
+                                    <span class="file-icon">\${getFileIcon(file.type)}</span>
+                                    \${file.type} (\${currentFilter === 'all' ? totalDeps : filteredDeps.length}\${currentFilter !== 'all' ? '/' + totalDeps : ''} deps)
+                                    <div style="font-size: 11px; color: var(--vscode-descriptionForeground); font-weight: normal;">
+                                        \${file.relativePath}
+                                        \${vulnerableDeps.length > 0 ? \`<span class="vulnerability-warning"> • \${vulnerableDeps.length} vulnerable</span>\` : ''}
+                                        \${outdatedDeps.length > 0 ? \`<span class="outdated-warning"> • \${outdatedDeps.length} outdated</span>\` : ''}
+                                        \${unknownLicenseDeps.length > 0 ? \`<span class="license-warning"> • \${unknownLicenseDeps.length} unknown license</span>\` : ''}
+                                    </div>
                                 </div>
+                                <span class="toggle-icon" id="toggle-\${file.filePath.replace(/[^a-zA-Z0-9]/g, '_')}">▼</span>
                             </div>
-                        </div>
-                    \`;
+                            <div class="file-dependencies" id="deps-\${file.filePath.replace(/[^a-zA-Z0-9]/g, '_')}" style="display: none;">
+                \`;
+
+                    // Group dependencies by type
+                    const depTypes = ['dependency', 'devDependency', 'peerDependency', 'optionalDependency'];
+                    const typeLabels = {
+                        'dependency': 'Dependencies',
+                        'devDependency': 'Dev Dependencies',
+                        'peerDependency': 'Peer Dependencies',
+                        'optionalDependency': 'Optional Dependencies'
+                    };
+
+                    depTypes.forEach(type => {
+                        const depsOfType = fileData.dependencies.filter(dep => dep.type === type && shouldShowDependency(dep));
+                        if (depsOfType.length > 0) {
+                            html += \`<div style="margin: 8px 0; padding-left: 16px;">
+                                <div style="font-weight: 500; font-size: 12px; color: var(--vscode-titleBar-activeForeground); margin-bottom: 4px;">
+                                    \${typeLabels[type]} (\${depsOfType.length})
+                                </div>\`;
+
+                            depsOfType.forEach(dep => {
+                                const typeColor = {
+                                    'dependency': '#4CAF50',
+                                    'devDependency': '#FF9800',
+                                    'peerDependency': '#2196F3',
+                                    'optionalDependency': '#9C27B0'
+                                }[type];
+
+                                const metadata = dep.metadata;
+                                let packageClasses = 'file-item';
+                                let alertBadges = '';
+                                let vulnerabilityInfo = '';
+
+                                if (metadata) {
+                                    if (metadata.hasVulnerabilities) {
+                                        packageClasses += ' vulnerable';
+                                    } else if (metadata.isOutdated && metadata.hasUnknownLicense) {
+                                        packageClasses += ' critical';
+                                    } else if (metadata.isOutdated) {
+                                        packageClasses += ' outdated';
+                                    } else if (metadata.hasUnknownLicense) {
+                                        packageClasses += ' unknown-license';
+                                    }
+
+                                    if (metadata.isOutdated) {
+                                        alertBadges += '<span class="metadata-badge outdated">OUTDATED</span>';
+                                    }
+                                    if (metadata.hasUnknownLicense) {
+                                        alertBadges += '<span class="metadata-badge unknown-license">NO LICENSE</span>';
+                                    }
+                                    if (metadata.hasVulnerabilities) {
+                                        alertBadges += \`<span class="vulnerability-badge \${metadata.highestSeverity?.toLowerCase() || 'unknown'}">\${metadata.highestSeverity || 'VULN'}</span>\`;
+                                        if (metadata.vulnerabilityCount > 1) {
+                                            alertBadges += \`<span class="vulnerability-count">\${metadata.vulnerabilityCount}</span>\`;
+                                        }
+                                    }
+
+                                    if (dep.vulnerabilities && dep.vulnerabilities.length > 0) {
+                                        vulnerabilityInfo = '<div class="vulnerability-details">';
+                                        dep.vulnerabilities.forEach(vuln => {
+                                            vulnerabilityInfo += \`
+                                                <div class="vulnerability-item">
+                                                    <div class="vulnerability-cve">\${vuln.id} \${vuln.cveIds.length > 0 ? '(' + vuln.cveIds.join(', ') + ')' : ''}</div>
+                                                    <div class="vulnerability-summary">\${vuln.summary}</div>
+                                                </div>
+                                            \`;
+                                        });
+                                        vulnerabilityInfo += '</div>';
+                                    }
+                                }
+
+                                html += \`
+                                    <div class="\${packageClasses} package-item" style="padding: 6px 8px;">
+                                        <span style="width: 8px; height: 8px; border-radius: 50%; background-color: \${typeColor}; margin-right: 8px; flex-shrink: 0;"></span>
+                                        <div style="flex: 1;">
+                                            <div class="file-name">
+                                                \${dep.name}
+                                                \${alertBadges}
+                                            </div>
+                                            <div class="file-path">\${dep.version}</div>
+                                            \${metadata ? renderPackageMetadata(metadata) : '<div class="package-metadata">Metadata unavailable for \${ecosystem}</div>'}
+                                            \${vulnerabilityInfo}
+                                        </div>
+                                    </div>
+                                \`;
+                            });
+
+                            html += '</div>';
+                        }
+                    });
+
+                    html += '</div></div>';
                 });
 
                 html += '</div>';
