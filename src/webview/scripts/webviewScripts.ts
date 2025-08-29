@@ -76,12 +76,15 @@ export const getWebviewJavaScript = (): string => {
 
         function restoreLastData() {
             if (lastData && lastCommand) {
+                // Don't reset loading state if we're currently in a loading operation
+                const resetLoadingState = !isLoading;
+
                 if (lastCommand === 'scanDependencies') {
-                    renderDependencies(lastData);
+                    renderDependencies(lastData, resetLoadingState);
                 } else if (lastCommand === 'scanPackageJson') {
-                    renderPackageJsonDependencies(lastData);
+                    renderPackageJsonDependencies(lastData, resetLoadingState);
                 } else if (lastCommand === 'scanAllEcosystems') {
-                    renderAllEcosystemsDependencies(lastData);
+                    renderAllEcosystemsDependencies(lastData, resetLoadingState);
                 }
             }
         }
@@ -216,8 +219,10 @@ export const getWebviewJavaScript = (): string => {
             return colors[ecosystem] || '#666666';
         }
 
-        function renderDependencies(summary) {
-            setLoadingState(false);
+        function renderDependencies(summary, resetLoadingState = true) {
+            if (resetLoadingState) {
+                setLoadingState(false);
+            }
             lastData = summary;
             lastCommand = 'scanDependencies';
 
@@ -283,8 +288,10 @@ export const getWebviewJavaScript = (): string => {
             content.innerHTML = html;
         }
 
-        function renderPackageJsonDependencies(summary) {
-            setLoadingState(false);
+        function renderPackageJsonDependencies(summary, resetLoadingState = true) {
+            if (resetLoadingState) {
+                setLoadingState(false);
+            }
             lastData = summary;
             lastCommand = 'scanPackageJson';
 
@@ -522,8 +529,10 @@ export const getWebviewJavaScript = (): string => {
             \`;
         }
 
-        function renderAllEcosystemsDependencies(summary) {
-            setLoadingState(false);
+        function renderAllEcosystemsDependencies(summary, resetLoadingState = true) {
+            if (resetLoadingState) {
+                setLoadingState(false);
+            }
             lastData = summary;
             lastCommand = 'scanAllEcosystems';
 
