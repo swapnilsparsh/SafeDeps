@@ -41,13 +41,13 @@ export const getWebviewJavaScript = (): string => {
             isLoading = loading;
             const scanButton = document.querySelector('button[onclick="scanDependencies()"]');
             const allEcosystemsButton = document.querySelector('button[onclick="scanAllEcosystems()"]');
-            const ecosystemDropdownBtn = document.getElementById('ecosystemDropdownBtn');
+            const ecosystemBtn = document.getElementById('ecosystemBtn');
 
-            [scanButton, allEcosystemsButton, ecosystemDropdownBtn].forEach(btn => {
-                if (btn) {
-                    btn.disabled = loading;
-                    btn.style.opacity = loading ? '0.6' : '1';
-                    btn.style.cursor = loading ? 'not-allowed' : 'pointer';
+            [scanButton, allEcosystemsButton, ecosystemBtn].forEach(element => {
+                if (element) {
+                    element.disabled = loading;
+                    element.style.opacity = loading ? '0.6' : '1';
+                    element.style.cursor = loading ? 'not-allowed' : 'pointer';
                 }
             });
         }
@@ -88,19 +88,9 @@ export const getWebviewJavaScript = (): string => {
 
             if (lastData && lastCommand === 'scanAllEcosystems') {
                 renderAllEcosystemsDependencies(lastData);
+            } else if (lastData && lastCommand === 'scanEcosystem') {
+                renderEcosystemDependencies(lastData);
             }
-        }
-
-        function shouldShowPackage(pkg) {
-            if (currentFilter === 'all') return true;
-            if (currentFilter === 'vulnerable') {
-                return pkg.dependencies.some(dep => dep.vulnerabilities && dep.vulnerabilities.length > 0);
-            }
-
-            const severityFilter = currentFilter.toUpperCase();
-            return pkg.dependencies.some(dep =>
-                dep.vulnerabilities && dep.vulnerabilities.some(vuln => vuln.severity === severityFilter)
-            );
         }
 
         function shouldShowDependency(dep) {
@@ -226,7 +216,7 @@ export const getWebviewJavaScript = (): string => {
                     <div class="summary-title">Scan Results</div>
                     <div class="summary-stats">
                         Found \${summary.totalFiles} dependency file\${summary.totalFiles !== 1 ? 's' : ''}
-                        across \${Object.keys(summary.filesByLanguage).length} language\${Object.keys(summary.filesByLanguage).length !== 1 ? 's' : ''}
+                        across \${Object.keys(summary.filesByLanguage).length} ecosystem\${Object.keys(summary.filesByLanguage).length !== 1 ? 's' : ''}
                     </div>
                 </div>
                 <div class="dependency-files">
@@ -242,9 +232,23 @@ export const getWebviewJavaScript = (): string => {
 
             Object.keys(filesByLanguage).sort().forEach(language => {
                 const files = filesByLanguage[language];
+
+                // Map technical language names to user-friendly ecosystem names
+                const ecosystemDisplayNames = {
+                    'JavaScript/TypeScript': 'npm (Node.js)',
+                    'Python': 'PyPI (Python)',
+                    'Java': 'Maven (Java)',
+                    'Go': 'Go Modules',
+                    'Rust': 'Crates.io (Rust)',
+                    'Ruby': 'RubyGems (Ruby)',
+                    'PHP': 'Packagist (PHP)'
+                };
+
+                const displayName = ecosystemDisplayNames[language] || language;
+
                 html += \`
                     <div class="language-group">
-                        <div class="language-header">\${language} (\${files.length})</div>
+                        <div class="language-header">\${displayName} (\${files.length})</div>
                 \`;
 
                 files.forEach(file => {
@@ -264,6 +268,30 @@ export const getWebviewJavaScript = (): string => {
 
             html += '</div>';
             content.innerHTML = html;
+
+            // Update available ecosystems for dropdown
+            updateAvailableEcosystemsFromSummary(summary);
+        }
+
+        function updateAvailableEcosystemsFromSummary(summary) {
+            if (!summary || !summary.filesByLanguage) return;
+
+            console.log('Summary data:', summary);
+
+            const ecosystems = Object.keys(summary.filesByLanguage).sort();
+            const filesByEcosystem = {};
+
+            // Count files per ecosystem
+            Object.keys(summary.filesByLanguage).forEach(ecosystem => {
+                filesByEcosystem[ecosystem] = summary.filesByLanguage[ecosystem];
+            });
+
+            console.log('Detected ecosystems:', ecosystems);
+            console.log('Files by ecosystem:', filesByEcosystem);
+
+            if (typeof updateAvailableEcosystems === 'function') {
+                updateAvailableEcosystems(ecosystems, filesByEcosystem);
+            }
         }
 
         function renderEcosystemDependencies(summary, resetLoadingState = true) {
@@ -287,8 +315,10 @@ export const getWebviewJavaScript = (): string => {
                 return;
             }
 
-            const hasAlerts = summary.outdatedPackages > 0 || summary.unknownLicensePackages > 0 || summary.vulnerablePackages > 0;
             const hasVulnerabilities = summary.vulnerablePackages > 0;
+            const hasOutdated = summary.outdatedPackages > 0;
+            const hasUnknownLicense = summary.unknownLicensePackages > 0;
+            const hasAlerts = hasVulnerabilities || hasOutdated || hasUnknownLicense;
 
             let html = \`
                 <div class="summary">
@@ -307,162 +337,63 @@ export const getWebviewJavaScript = (): string => {
                         </div>
                     \` : ''}
                     <div class="summary-alerts \${hasAlerts ? '' : 'hidden'}">
-                        \${summary.outdatedPackages > 0 ? '⚠️ ' + summary.outdatedPackages + ' outdated package' + (summary.outdatedPackages !== 1 ? 's' : '') : ''}
-                        \${summary.unknownLicensePackages > 0 ? (summary.outdatedPackages > 0 ? '<br>' : '') + '❓ ' + summary.unknownLicensePackages + ' package' + (summary.unknownLicensePackages !== 1 ? 's' : '') + ' with unknown license' : ''}
-                        \${summary.vulnerablePackages > 0 ? (summary.outdatedPackages > 0 || summary.unknownLicensePackages > 0 ? '<br>' : '') + '🚨 ' + summary.vulnerablePackages + ' vulnerable package' + (summary.vulnerablePackages !== 1 ? 's' : '') : ''}
-                    </div>
-                </div>
-                \${hasVulnerabilities ? \`
-                    <div class="filter-bar">
-                        <span style="font-size: 11px; font-weight: 500;">Filter:</span>
-                        <button class="filter-button active" data-filter="all" onclick="setVulnerabilityFilter('all')">All</button>
-                        <button class="filter-button" data-filter="vulnerable" onclick="setVulnerabilityFilter('vulnerable')">Vulnerable Only</button>
-                        \${summary.vulnerabilityBreakdown.critical > 0 ? \`<button class="filter-button" data-filter="critical" onclick="setVulnerabilityFilter('critical')">Critical (\${summary.vulnerabilityBreakdown.critical})</button>\` : ''}
-                        \${summary.vulnerabilityBreakdown.high > 0 ? \`<button class="filter-button" data-filter="high" onclick="setVulnerabilityFilter('high')">High (\${summary.vulnerabilityBreakdown.high})</button>\` : ''}
-                        \${summary.vulnerabilityBreakdown.medium > 0 ? \`<button class="filter-button" data-filter="medium" onclick="setVulnerabilityFilter('medium')">Medium (\${summary.vulnerabilityBreakdown.medium})</button>\` : ''}
-                        \${summary.vulnerabilityBreakdown.low > 0 ? \`<button class="filter-button" data-filter="low" onclick="setVulnerabilityFilter('low')">Low (\${summary.vulnerabilityBreakdown.low})</button>\` : ''}
-                    </div>
-                \` : ''}
-                <div class="dependency-files">
-            \`;
-
-            summary.files.forEach(fileData => {
-                const visibleDeps = fileData.dependencies.filter(shouldShowDependency);
-                if (visibleDeps.length === 0) return;
-
-                html += \`
-                    <div class="language-group">
-                        <div class="language-header" onclick="openFile('\${fileData.file.filePath.replace(/\\\\/g, '\\\\\\\\')}')">
-                            <div class="language-header-content">
-                                📄 \${fileData.file.relativePath} (\${fileData.dependencies.length} deps)
-                            </div>
-                        </div>
-                        <div class="file-dependencies">
-                \`;
-
-                visibleDeps.forEach(dep => {
-                    let packageClasses = 'file-item';
-                    let alertBadges = '';
-
-                    if (dep.metadata) {
-                        if (dep.vulnerabilities && dep.vulnerabilities.length > 0) {
-                            packageClasses += ' vulnerable';
-                            const highestSeverity = dep.vulnerabilities.reduce((highest, vuln) => {
-                                const severityOrder = { UNKNOWN: 0, LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
-                                return severityOrder[vuln.severity] > severityOrder[highest] ? vuln.severity : highest;
-                            }, 'UNKNOWN');
-                            alertBadges += \`<span class="vulnerability-badge \${highestSeverity.toLowerCase()}">\${highestSeverity}</span>\`;
-                            if (dep.vulnerabilities.length > 1) {
-                                alertBadges += \`<span class="vulnerability-count">\${dep.vulnerabilities.length}</span>\`;
-                            }
-                        }
-                        if (dep.metadata.isOutdated) {
-                            alertBadges += '<span class="metadata-badge outdated">OUTDATED</span>';
-                        }
-                        if (dep.metadata.hasUnknownLicense) {
-                            alertBadges += '<span class="metadata-badge unknown-license">NO LICENSE</span>';
-                        }
-                    }
-
-                    html += \`
-                        <div class="\${packageClasses}">
-                            <div class="dependency-info">
-                                <div class="dependency-name">\${dep.name}</div>
-                                <div class="dependency-version">\${dep.version}</div>
-                                <div class="dependency-badges">
-                                    <span class="dependency-type">\${dep.type}</span>
-                                    \${alertBadges}
-                                </div>
-                            </div>
-                        </div>
-                    \`;
-                });
-
-                html += '</div></div>';
-            });
-
-            html += '</div>';
-            content.innerHTML = html;
-        }
-
-        function renderPackageJsonDependencies(summary, resetLoadingState = true) {
-            if (resetLoadingState) {
-                setLoadingState(false);
-            }
-            lastData = summary;
-            lastCommand = 'scanEcosystem';
-
-            const content = document.getElementById('content');
-
-            if (summary.totalPackageFiles === 0) {
-                content.innerHTML = \`
-                    <div class="empty-state">
-                        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        <div>No package.json files found in workspace</div>
-                    </div>
-                \`;
-                return;
-            }
-
-            const hasAlerts = summary.outdatedPackages > 0 || summary.unknownLicensePackages > 0 || summary.vulnerablePackages > 0;
-            const hasVulnerabilities = summary.vulnerablePackages > 0;
-
-            let html = \`
-                <div class="summary">
-                    <div class="summary-title">Package.json Analysis</div>
-                    <div class="summary-stats">
-                        Found \${summary.totalDependencies} dependencies across \${summary.totalPackageFiles} package.json file\${summary.totalPackageFiles !== 1 ? 's' : ''}
-                        <br>
-                        Dependencies: \${summary.dependencyBreakdown.dependencies} |
-                        DevDependencies: \${summary.dependencyBreakdown.devDependencies}
-                        \${summary.dependencyBreakdown.peerDependencies > 0 ? ' | Peer: ' + summary.dependencyBreakdown.peerDependencies : ''}
-                        \${summary.dependencyBreakdown.optionalDependencies > 0 ? ' | Optional: ' + summary.dependencyBreakdown.optionalDependencies : ''}
-                        \${hasVulnerabilities ? \`<br><span class="vulnerability-warning">🚨 \${summary.vulnerablePackages} vulnerable package\${summary.vulnerablePackages !== 1 ? 's' : ''} found</span>\` : '<br>✅ No known vulnerabilities'}
-                    </div>
-                    \${hasVulnerabilities ? \`
-                        <div class="vulnerability-stats">
-                            \${summary.vulnerabilityBreakdown.critical > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot critical"></span>Critical: \${summary.vulnerabilityBreakdown.critical}</div>\` : ''}
-                            \${summary.vulnerabilityBreakdown.high > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot high"></span>High: \${summary.vulnerabilityBreakdown.high}</div>\` : ''}
-                            \${summary.vulnerabilityBreakdown.medium > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot medium"></span>Medium: \${summary.vulnerabilityBreakdown.medium}</div>\` : ''}
-                            \${summary.vulnerabilityBreakdown.low > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot low"></span>Low: \${summary.vulnerabilityBreakdown.low}</div>\` : ''}
-                            \${summary.vulnerabilityBreakdown.unknown > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot unknown"></span>Unknown: \${summary.vulnerabilityBreakdown.unknown}</div>\` : ''}
-                        </div>
-                    \` : ''}
-                    <div class="summary-alerts \${hasAlerts ? '' : 'hidden'}">
-                        \${summary.outdatedPackages > 0 ? '⚠️ ' + summary.outdatedPackages + ' outdated package' + (summary.outdatedPackages !== 1 ? 's' : '') + ' (not updated in 1+ year)' : ''}
-                        \${summary.unknownLicensePackages > 0 ? (summary.outdatedPackages > 0 ? '<br>' : '') + '❓ ' + summary.unknownLicensePackages + ' package' + (summary.unknownLicensePackages !== 1 ? 's' : '') + ' with unknown license' : ''}
-                        \${summary.vulnerablePackages > 0 ? (summary.outdatedPackages > 0 || summary.unknownLicensePackages > 0 ? '<br>' : '') + '🚨 ' + summary.vulnerablePackages + ' vulnerable package' + (summary.vulnerablePackages !== 1 ? 's' : '') : ''}
+                        \${hasOutdated ? '⚠️ ' + summary.outdatedPackages + ' outdated package' + (summary.outdatedPackages !== 1 ? 's' : '') : ''}
+                        \${hasUnknownLicense ? (hasOutdated ? '<br>' : '') + '❓ ' + summary.unknownLicensePackages + ' package' + (summary.unknownLicensePackages !== 1 ? 's' : '') + ' with unknown license' : ''}
+                        \${hasVulnerabilities ? (hasOutdated || hasUnknownLicense ? '<br>' : '') + '🚨 ' + summary.vulnerablePackages + ' vulnerable package' + (summary.vulnerablePackages !== 1 ? 's' : '') : ''}
                     </div>
                 </div>
                 <div class="filter-bar">
                     <span style="font-size: 11px; font-weight: 500;">Filter:</span>
-                    <button class="filter-button active" data-filter="all" onclick="setVulnerabilityFilter('all')">All</button>
-                    \${hasVulnerabilities ? \`<button class="filter-button" data-filter="vulnerable" onclick="setVulnerabilityFilter('vulnerable')">Vulnerable Only</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.critical > 0 ? \`<button class="filter-button" data-filter="critical" onclick="setVulnerabilityFilter('critical')">Critical (\${summary.vulnerabilityBreakdown.critical})</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.high > 0 ? \`<button class="filter-button" data-filter="high" onclick="setVulnerabilityFilter('high')">High (\${summary.vulnerabilityBreakdown.high})</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.medium > 0 ? \`<button class="filter-button" data-filter="medium" onclick="setVulnerabilityFilter('medium')">Medium (\${summary.vulnerabilityBreakdown.medium})</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.low > 0 ? \`<button class="filter-button" data-filter="low" onclick="setVulnerabilityFilter('low')">Low (\${summary.vulnerabilityBreakdown.low})</button>\` : ''}
+                    <button class="filter-button active" data-filter="all" onclick="setEcosystemFilter('all')">All</button>
+                    \${hasVulnerabilities ? \`<button class="filter-button" data-filter="vulnerable" onclick="setEcosystemFilter('vulnerable')">Vulnerable Only</button>\` : ''}
+                    \${hasOutdated ? \`<button class="filter-button" data-filter="outdated" onclick="setEcosystemFilter('outdated')">Outdated Only</button>\` : ''}
+                    \${hasUnknownLicense ? \`<button class="filter-button" data-filter="unknown-license" onclick="setEcosystemFilter('unknown-license')">Unknown License</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.critical > 0 ? \`<button class="filter-button" data-filter="critical" onclick="setEcosystemFilter('critical')">Critical (\${summary.vulnerabilityBreakdown.critical})</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.high > 0 ? \`<button class="filter-button" data-filter="high" onclick="setEcosystemFilter('high')">High (\${summary.vulnerabilityBreakdown.high})</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.medium > 0 ? \`<button class="filter-button" data-filter="medium" onclick="setEcosystemFilter('medium')">Medium (\${summary.vulnerabilityBreakdown.medium})</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.low > 0 ? \`<button class="filter-button" data-filter="low" onclick="setEcosystemFilter('low')">Low (\${summary.vulnerabilityBreakdown.low})</button>\` : ''}
+                </div>
+                <div class="action-bar">
+                    <button class="action-button" onclick="expandAllFiles()">📂 Expand All</button>
+                    <button class="action-button" onclick="collapseAllFiles()">📁 Collapse All</button>
                 </div>
                 <div class="dependency-files">
             \`;
 
-            summary.packages.forEach(pkg => {
-                if (!shouldShowPackage(pkg)) return;
+            summary.files.forEach(fileData => {
+                const file = fileData.file;
+                const allDeps = fileData.dependencies;
+                const filteredDeps = allDeps.filter(dep => shouldShowDependency(dep));
+
+                // Skip files with no matching dependencies when filtering
+                if (currentFilter !== 'all' && filteredDeps.length === 0) {
+                    return;
+                }
+
+                const totalDeps = allDeps.length;
+                const vulnerableDeps = allDeps.filter(dep => dep.vulnerabilities && dep.vulnerabilities.length > 0);
+                const outdatedDeps = allDeps.filter(dep => dep.metadata && dep.metadata.isOutdated);
+                const unknownLicenseDeps = allDeps.filter(dep => dep.metadata && dep.metadata.hasUnknownLicense);
 
                 html += \`
                     <div class="language-group">
-                        <div class="language-header" onclick="openFile('\${pkg.filePath.replace(/\\\\/g, '\\\\\\\\')}')">
+                        <div class="language-header" onclick="toggleFileDetails('\${file.filePath.replace(/\\\\/g, '\\\\\\\\')}')">
                             <div class="language-header-content">
-                                📦 \${pkg.packageName || 'package.json'} (\${pkg.totalDependencies} deps)
+                                <span class="file-icon">\${getFileIcon(file.type)}</span>
+                                \${file.type} (\${currentFilter === 'all' ? totalDeps : filteredDeps.length}\${currentFilter !== 'all' ? '/' + totalDeps : ''} deps)
                                 <div style="font-size: 11px; color: var(--vscode-descriptionForeground); font-weight: normal;">
-                                    \${pkg.relativePath}
+                                    \${file.relativePath}
+                                    \${vulnerableDeps.length > 0 ? \`<span class="vulnerability-warning"> • \${vulnerableDeps.length} vulnerable</span>\` : ''}
+                                    \${outdatedDeps.length > 0 ? \`<span class="outdated-warning"> • \${outdatedDeps.length} outdated</span>\` : ''}
+                                    \${unknownLicenseDeps.length > 0 ? \`<span class="license-warning"> • \${unknownLicenseDeps.length} unknown license</span>\` : ''}
                                 </div>
                             </div>
+                            <span class="toggle-icon" id="toggle-\${file.filePath.replace(/[^a-zA-Z0-9]/g, '_')}">▼</span>
                         </div>
-                \`;
+                        <div class="file-dependencies" id="deps-\${file.filePath.replace(/[^a-zA-Z0-9]/g, '_')}" style="display: none;">
+            \`;
 
+                // Group dependencies by type
                 const depTypes = ['dependency', 'devDependency', 'peerDependency', 'optionalDependency'];
                 const typeLabels = {
                     'dependency': 'Dependencies',
@@ -472,7 +403,7 @@ export const getWebviewJavaScript = (): string => {
                 };
 
                 depTypes.forEach(type => {
-                    const depsOfType = pkg.dependencies.filter(dep => dep.type === type && shouldShowDependency(dep));
+                    const depsOfType = fileData.dependencies.filter(dep => dep.type === type && shouldShowDependency(dep));
                     if (depsOfType.length > 0) {
                         html += \`<div style="margin: 8px 0; padding-left: 16px;">
                             <div style="font-weight: 500; font-size: 12px; color: var(--vscode-titleBar-activeForeground); margin-bottom: 4px;">
@@ -539,7 +470,7 @@ export const getWebviewJavaScript = (): string => {
                                             \${alertBadges}
                                         </div>
                                         <div class="file-path">\${dep.version}</div>
-                                        \${metadata ? renderPackageMetadata(metadata) : '<div class="package-metadata">Loading metadata...</div>'}
+                                        \${metadata ? renderPackageMetadata(metadata) : '<div class="package-metadata">Metadata unavailable for \${summary.ecosystem}</div>'}
                                         \${vulnerabilityInfo}
                                     </div>
                                 </div>
@@ -550,7 +481,7 @@ export const getWebviewJavaScript = (): string => {
                     }
                 });
 
-                html += '</div>';
+                html += '</div></div>';
             });
 
             html += '</div>';

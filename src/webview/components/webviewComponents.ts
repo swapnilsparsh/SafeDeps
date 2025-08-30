@@ -17,11 +17,11 @@ export const getWebviewHeader = (): string => {
 export const getWebviewButtons = (): string => {
   return `
         <button class="scan-button" onclick="scanDependencies()">
-            🔍 Scan Dependencies
+            🔍 Scan Workspace
         </button>
         ${getEcosystemDropdownButton()}
         <button class="scan-button" onclick="scanAllEcosystems()">
-            🌐 Analyze All Ecosystems
+            🌐 All Ecosystems
         </button>
     `;
 };

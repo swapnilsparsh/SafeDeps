@@ -31,18 +31,32 @@ export const getWebviewStyles = (): string => {
             color: var(--vscode-titleBar-activeForeground);
         }
         .scan-button {
-            background-color: var(--vscode-button-background);
+            background: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
-            border: none;
-            padding: 8px 16px;
+            border: 1px solid var(--vscode-button-border, transparent);
+            padding: 8px 12px;
             border-radius: 4px;
             cursor: pointer;
-            font-size: 13px;
-            margin-bottom: 16px;
+            font-size: 12px;
+            font-weight: 400;
+            margin-bottom: 8px;
             width: 100%;
+            transition: background-color 0.15s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
         }
         .scan-button:hover {
-            background-color: var(--vscode-button-hoverBackground);
+            background: var(--vscode-button-hoverBackground);
+        }
+        .scan-button:focus {
+            outline: 2px solid var(--vscode-focusBorder);
+            outline-offset: 2px;
+        }
+        .scan-button:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
         ${getEcosystemDropdownButtonStyles()}
         .action-bar {
@@ -364,5 +378,36 @@ export const getWebviewStyles = (): string => {
         .vulnerability-stat-dot.medium { background-color: #ffc107; }
         .vulnerability-stat-dot.low { background-color: #28a745; }
         .vulnerability-stat-dot.unknown { background-color: #6c757d; }
+        .vulnerability-warning {
+            color: #dc3545;
+            font-weight: 500;
+        }
+        .outdated-warning {
+            color: #fd7e14;
+            font-weight: 500;
+        }
+        .license-warning {
+            color: #ffc107;
+            font-weight: 500;
+        }
+        .action-bar {
+            margin-bottom: 16px;
+            display: flex;
+            gap: 8px;
+        }
+        .action-button {
+            padding: 6px 12px;
+            border: 1px solid var(--vscode-panel-border);
+            background-color: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+        }
+        .action-button:hover {
+            background-color: var(--vscode-button-hoverBackground);
+            color: var(--vscode-button-foreground);
+        }
     `;
 };
