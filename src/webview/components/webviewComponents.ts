@@ -1,3 +1,5 @@
+import { getEcosystemDropdownButton } from "./EcosystemDropdown";
+
 export const getWebviewHeader = (): string => {
   return `
         <div class="header">
@@ -17,9 +19,7 @@ export const getWebviewButtons = (): string => {
         <button class="scan-button" onclick="scanDependencies()">
             🔍 Scan Dependencies
         </button>
-        <button class="scan-button" onclick="scanPackageJson()">
-            📦 Analyze npm Dependencies
-        </button>
+        ${getEcosystemDropdownButton()}
         <button class="scan-button" onclick="scanAllEcosystems()">
             🌐 Analyze All Ecosystems
         </button>

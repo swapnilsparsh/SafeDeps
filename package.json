@@ -43,8 +43,8 @@
         "category": "SafeDeps"
       },
       {
-        "command": "safedeps.analyzePackageJson",
-        "title": "Analyze package.json Dependencies",
+        "command": "safedeps.scanEcosystem",
+        "title": "Scan Ecosystem Dependencies",
         "category": "SafeDeps"
       }
     ]

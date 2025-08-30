@@ -1,5 +1,6 @@
 // Core exports
 export { DependencyScanner } from "./core/DependencyScanner";
+export { EcosystemScanner } from "./core/EcosystemScanner";
 export { BaseDependencyScanner } from "./core/BaseDependencyScanner";
 export { DEPENDENCY_FILE_CONFIGS, EXCLUDE_PATTERNS } from "./core/config";
 export { IDependencyScanner, IScanConfig } from "./core/interfaces";

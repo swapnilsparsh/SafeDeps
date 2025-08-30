@@ -1,3 +1,5 @@
+import { getEcosystemDropdownButtonScript } from "../components/EcosystemDropdown";
+
 export const getWebviewJavaScript = (): string => {
   return `
         const vscode = acquireVsCodeApi();
@@ -21,20 +23,6 @@ export const getWebviewJavaScript = (): string => {
             vscode.postMessage({ command: 'scanDependencies' });
         }
 
-        function scanPackageJson() {
-            if (isLoading) return;
-
-            setLoadingState(true);
-            lastCommand = 'scanPackageJson';
-            document.getElementById('content').innerHTML = \`
-                <div class="loading">
-                    <div class="loading-spinner"></div>
-                    <div>Analyzing dependencies and fetching metadata from npm registry...</div>
-                </div>
-            \`;
-            vscode.postMessage({ command: 'scanPackageJson' });
-        }
-
         function scanAllEcosystems() {
             if (isLoading) return;
 
@@ -52,26 +40,16 @@ export const getWebviewJavaScript = (): string => {
         function setLoadingState(loading) {
             isLoading = loading;
             const scanButton = document.querySelector('button[onclick="scanDependencies()"]');
-            const packageButton = document.querySelector('button[onclick="scanPackageJson()"]');
             const allEcosystemsButton = document.querySelector('button[onclick="scanAllEcosystems()"]');
+            const ecosystemDropdownBtn = document.getElementById('ecosystemDropdownBtn');
 
-            if (scanButton) {
-                scanButton.disabled = loading;
-                scanButton.style.opacity = loading ? '0.6' : '1';
-                scanButton.style.cursor = loading ? 'not-allowed' : 'pointer';
-            }
-
-            if (packageButton) {
-                packageButton.disabled = loading;
-                packageButton.style.opacity = loading ? '0.6' : '1';
-                packageButton.style.cursor = loading ? 'not-allowed' : 'pointer';
-            }
-
-            if (allEcosystemsButton) {
-                allEcosystemsButton.disabled = loading;
-                allEcosystemsButton.style.opacity = loading ? '0.6' : '1';
-                allEcosystemsButton.style.cursor = loading ? 'not-allowed' : 'pointer';
-            }
+            [scanButton, allEcosystemsButton, ecosystemDropdownBtn].forEach(btn => {
+                if (btn) {
+                    btn.disabled = loading;
+                    btn.style.opacity = loading ? '0.6' : '1';
+                    btn.style.cursor = loading ? 'not-allowed' : 'pointer';
+                }
+            });
         }
 
         function restoreLastData() {
@@ -81,8 +59,8 @@ export const getWebviewJavaScript = (): string => {
 
                 if (lastCommand === 'scanDependencies') {
                     renderDependencies(lastData, resetLoadingState);
-                } else if (lastCommand === 'scanPackageJson') {
-                    renderPackageJsonDependencies(lastData, resetLoadingState);
+                } else if (lastCommand === 'scanEcosystem') {
+                    renderEcosystemDependencies(lastData, resetLoadingState);
                 } else if (lastCommand === 'scanAllEcosystems') {
                     renderAllEcosystemsDependencies(lastData, resetLoadingState);
                 }
@@ -96,8 +74,8 @@ export const getWebviewJavaScript = (): string => {
             });
             document.querySelector(\`[data-filter="\${filter}"]\`).classList.add('active');
 
-            if (lastData && lastCommand === 'scanPackageJson') {
-                renderPackageJsonDependencies(lastData);
+            if (lastData && lastCommand === 'scanEcosystem') {
+                renderEcosystemDependencies(lastData);
             }
         }
 
@@ -288,12 +266,131 @@ export const getWebviewJavaScript = (): string => {
             content.innerHTML = html;
         }
 
+        function renderEcosystemDependencies(summary, resetLoadingState = true) {
+            if (resetLoadingState) {
+                setLoadingState(false);
+            }
+            lastData = summary;
+            lastCommand = 'scanEcosystem';
+
+            const content = document.getElementById('content');
+
+            if (summary.totalFiles === 0) {
+                content.innerHTML = \`
+                    <div class="empty-state">
+                        <svg class="empty-state-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M9 12L11 14L15 10M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        <div>No \${summary.ecosystem} files found in workspace</div>
+                    </div>
+                \`;
+                return;
+            }
+
+            const hasAlerts = summary.outdatedPackages > 0 || summary.unknownLicensePackages > 0 || summary.vulnerablePackages > 0;
+            const hasVulnerabilities = summary.vulnerablePackages > 0;
+
+            let html = \`
+                <div class="summary">
+                    <div class="summary-title">\${summary.ecosystem} Ecosystem Analysis</div>
+                    <div class="summary-stats">
+                        Found \${summary.totalDependencies} dependencies in \${summary.totalFiles} \${summary.ecosystem} file\${summary.totalFiles !== 1 ? 's' : ''}
+                        \${hasVulnerabilities ? \`<br><span class="vulnerability-warning">🚨 \${summary.vulnerablePackages} vulnerable package\${summary.vulnerablePackages !== 1 ? 's' : ''} found</span>\` : '<br>✅ No known vulnerabilities'}
+                    </div>
+                    \${hasVulnerabilities ? \`
+                        <div class="vulnerability-stats">
+                            \${summary.vulnerabilityBreakdown.critical > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot critical"></span>Critical: \${summary.vulnerabilityBreakdown.critical}</div>\` : ''}
+                            \${summary.vulnerabilityBreakdown.high > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot high"></span>High: \${summary.vulnerabilityBreakdown.high}</div>\` : ''}
+                            \${summary.vulnerabilityBreakdown.medium > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot medium"></span>Medium: \${summary.vulnerabilityBreakdown.medium}</div>\` : ''}
+                            \${summary.vulnerabilityBreakdown.low > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot low"></span>Low: \${summary.vulnerabilityBreakdown.low}</div>\` : ''}
+                            \${summary.vulnerabilityBreakdown.unknown > 0 ? \`<div class="vulnerability-stat"><span class="vulnerability-stat-dot unknown"></span>Unknown: \${summary.vulnerabilityBreakdown.unknown}</div>\` : ''}
+                        </div>
+                    \` : ''}
+                    <div class="summary-alerts \${hasAlerts ? '' : 'hidden'}">
+                        \${summary.outdatedPackages > 0 ? '⚠️ ' + summary.outdatedPackages + ' outdated package' + (summary.outdatedPackages !== 1 ? 's' : '') : ''}
+                        \${summary.unknownLicensePackages > 0 ? (summary.outdatedPackages > 0 ? '<br>' : '') + '❓ ' + summary.unknownLicensePackages + ' package' + (summary.unknownLicensePackages !== 1 ? 's' : '') + ' with unknown license' : ''}
+                        \${summary.vulnerablePackages > 0 ? (summary.outdatedPackages > 0 || summary.unknownLicensePackages > 0 ? '<br>' : '') + '🚨 ' + summary.vulnerablePackages + ' vulnerable package' + (summary.vulnerablePackages !== 1 ? 's' : '') : ''}
+                    </div>
+                </div>
+                \${hasVulnerabilities ? \`
+                    <div class="filter-bar">
+                        <span style="font-size: 11px; font-weight: 500;">Filter:</span>
+                        <button class="filter-button active" data-filter="all" onclick="setVulnerabilityFilter('all')">All</button>
+                        <button class="filter-button" data-filter="vulnerable" onclick="setVulnerabilityFilter('vulnerable')">Vulnerable Only</button>
+                        \${summary.vulnerabilityBreakdown.critical > 0 ? \`<button class="filter-button" data-filter="critical" onclick="setVulnerabilityFilter('critical')">Critical (\${summary.vulnerabilityBreakdown.critical})</button>\` : ''}
+                        \${summary.vulnerabilityBreakdown.high > 0 ? \`<button class="filter-button" data-filter="high" onclick="setVulnerabilityFilter('high')">High (\${summary.vulnerabilityBreakdown.high})</button>\` : ''}
+                        \${summary.vulnerabilityBreakdown.medium > 0 ? \`<button class="filter-button" data-filter="medium" onclick="setVulnerabilityFilter('medium')">Medium (\${summary.vulnerabilityBreakdown.medium})</button>\` : ''}
+                        \${summary.vulnerabilityBreakdown.low > 0 ? \`<button class="filter-button" data-filter="low" onclick="setVulnerabilityFilter('low')">Low (\${summary.vulnerabilityBreakdown.low})</button>\` : ''}
+                    </div>
+                \` : ''}
+                <div class="dependency-files">
+            \`;
+
+            summary.files.forEach(fileData => {
+                const visibleDeps = fileData.dependencies.filter(shouldShowDependency);
+                if (visibleDeps.length === 0) return;
+
+                html += \`
+                    <div class="language-group">
+                        <div class="language-header" onclick="openFile('\${fileData.file.filePath.replace(/\\\\/g, '\\\\\\\\')}')">
+                            <div class="language-header-content">
+                                📄 \${fileData.file.relativePath} (\${fileData.dependencies.length} deps)
+                            </div>
+                        </div>
+                        <div class="file-dependencies">
+                \`;
+
+                visibleDeps.forEach(dep => {
+                    let packageClasses = 'file-item';
+                    let alertBadges = '';
+
+                    if (dep.metadata) {
+                        if (dep.vulnerabilities && dep.vulnerabilities.length > 0) {
+                            packageClasses += ' vulnerable';
+                            const highestSeverity = dep.vulnerabilities.reduce((highest, vuln) => {
+                                const severityOrder = { UNKNOWN: 0, LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
+                                return severityOrder[vuln.severity] > severityOrder[highest] ? vuln.severity : highest;
+                            }, 'UNKNOWN');
+                            alertBadges += \`<span class="vulnerability-badge \${highestSeverity.toLowerCase()}">\${highestSeverity}</span>\`;
+                            if (dep.vulnerabilities.length > 1) {
+                                alertBadges += \`<span class="vulnerability-count">\${dep.vulnerabilities.length}</span>\`;
+                            }
+                        }
+                        if (dep.metadata.isOutdated) {
+                            alertBadges += '<span class="metadata-badge outdated">OUTDATED</span>';
+                        }
+                        if (dep.metadata.hasUnknownLicense) {
+                            alertBadges += '<span class="metadata-badge unknown-license">NO LICENSE</span>';
+                        }
+                    }
+
+                    html += \`
+                        <div class="\${packageClasses}">
+                            <div class="dependency-info">
+                                <div class="dependency-name">\${dep.name}</div>
+                                <div class="dependency-version">\${dep.version}</div>
+                                <div class="dependency-badges">
+                                    <span class="dependency-type">\${dep.type}</span>
+                                    \${alertBadges}
+                                </div>
+                            </div>
+                        </div>
+                    \`;
+                });
+
+                html += '</div></div>';
+            });
+
+            html += '</div>';
+            content.innerHTML = html;
+        }
+
         function renderPackageJsonDependencies(summary, resetLoadingState = true) {
             if (resetLoadingState) {
                 setLoadingState(false);
             }
             lastData = summary;
-            lastCommand = 'scanPackageJson';
+            lastCommand = 'scanEcosystem';
 
             const content = document.getElementById('content');
 
@@ -755,8 +852,8 @@ export const getWebviewJavaScript = (): string => {
                 case 'updateDependencies':
                     renderDependencies(message.data);
                     break;
-                case 'updatePackageJsonDependencies':
-                    renderPackageJsonDependencies(message.data);
+                case 'updateEcosystemDependencies':
+                    renderEcosystemDependencies(message.data);
                     break;
                 case 'updateAllEcosystemsDependencies':
                     renderAllEcosystemsDependencies(message.data);
@@ -779,5 +876,7 @@ export const getWebviewJavaScript = (): string => {
                 scanDependencies();
             }
         });
+
+        ${getEcosystemDropdownButtonScript()}
     `;
 };

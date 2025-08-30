@@ -91,6 +91,29 @@ export interface ScanSummary {
   files: DependencyFile[];
 }
 
+export interface EcosystemScanResult {
+  ecosystem: DependencyEcosystem;
+  totalFiles: number;
+  totalDependencies: number;
+  files: {
+    file: DependencyFile;
+    dependencies: (PackageDependency & {
+      vulnerabilities?: VulnerabilityInfo[];
+      metadata?: PackageMetadata;
+    })[];
+  }[];
+  vulnerablePackages: number;
+  outdatedPackages: number;
+  unknownLicensePackages: number;
+  vulnerabilityBreakdown: {
+    low: number;
+    medium: number;
+    high: number;
+    critical: number;
+    unknown: number;
+  };
+}
+
 export interface PackageMetadata {
   name: string;
   version: string;

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { DependencyScanner } from "../core/DependencyScanner";
+import { EcosystemScanner } from "../core/EcosystemScanner";
 import { generateWebviewHtml } from "../ui/WebviewTemplate";
 
 export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
@@ -7,11 +8,13 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
 
   private _view?: vscode.WebviewView;
   private _dependencyScanner: DependencyScanner;
+  private _ecosystemScanner: EcosystemScanner;
   private _lastScanResult: any = null;
   private _lastCommand: string | null = null;
 
   constructor(private readonly _extensionUri: vscode.Uri) {
     this._dependencyScanner = new DependencyScanner();
+    this._ecosystemScanner = new EcosystemScanner();
   }
 
   public resolveWebviewView(
@@ -36,8 +39,8 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
         case "scanDependencies":
           this._scanAndDisplayDependencies();
           break;
-        case "scanPackageJson":
-          this._scanPackageJsonDependencies();
+        case "scanEcosystem":
+          this._scanEcosystemDependencies(message.ecosystem);
           break;
         case "scanAllEcosystems":
           this._scanAllEcosystemsDependencies();
@@ -67,8 +70,8 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
   private _restoreLastData(): void {
     if (this._view && this._lastScanResult && this._lastCommand) {
       let updateCommand = "updateDependencies";
-      if (this._lastCommand === "scanPackageJson") {
-        updateCommand = "updatePackageJsonDependencies";
+      if (this._lastCommand === "scanEcosystem") {
+        updateCommand = "updateEcosystemDependencies";
       } else if (this._lastCommand === "scanAllEcosystems") {
         updateCommand = "updateAllEcosystemsDependencies";
       }
@@ -99,24 +102,25 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async _scanPackageJsonDependencies(): Promise<void> {
+  private async _scanEcosystemDependencies(ecosystem: string): Promise<void> {
     if (!this._view) {
       return;
     }
 
     try {
-      const summary =
-        await this._dependencyScanner.getPackageJsonSummaryWithMetadata();
+      const summary = await this._ecosystemScanner.scanEcosystem(
+        ecosystem as any
+      );
 
       this._lastScanResult = summary;
-      this._lastCommand = "scanPackageJson";
+      this._lastCommand = "scanEcosystem";
 
       this._view.webview.postMessage({
-        command: "updatePackageJsonDependencies",
+        command: "updateEcosystemDependencies",
         data: summary,
       });
     } catch (error) {
-      this._handleError("Failed to scan package.json dependencies", error);
+      this._handleError(`Failed to scan ${ecosystem} dependencies`, error);
     }
   }
 

@@ -1,3 +1,5 @@
+import { getEcosystemDropdownButtonStyles } from "../components/EcosystemDropdown";
+
 export const getWebviewStyles = (): string => {
   return `
         body {
@@ -42,6 +44,7 @@ export const getWebviewStyles = (): string => {
         .scan-button:hover {
             background-color: var(--vscode-button-hoverBackground);
         }
+        ${getEcosystemDropdownButtonStyles()}
         .action-bar {
             margin-bottom: 16px;
             display: flex;
