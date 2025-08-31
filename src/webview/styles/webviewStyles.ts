@@ -1,4 +1,5 @@
 import { getEcosystemDropdownButtonStyles } from "../components/EcosystemDropdown";
+import { getFilterUtilityStyles } from "../components/FilterUtils";
 
 export const getWebviewStyles = (): string => {
   return `
@@ -335,25 +336,44 @@ export const getWebviewStyles = (): string => {
             align-items: center;
             gap: 8px;
             flex-wrap: wrap;
+            border: 1px solid var(--vscode-panel-border);
         }
         .filter-button {
-            padding: 4px 8px;
+            padding: 4px 10px;
             border: 1px solid var(--vscode-panel-border);
             background-color: var(--vscode-button-secondaryBackground);
             color: var(--vscode-button-secondaryForeground);
-            border-radius: 3px;
+            border-radius: 4px;
             cursor: pointer;
             font-size: 11px;
-            transition: all 0.2s;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            position: relative;
+            min-height: 24px;
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
         }
         .filter-button.active {
             background-color: var(--vscode-button-background);
             color: var(--vscode-button-foreground);
             border-color: var(--vscode-button-background);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transform: translateY(-1px);
         }
-        .filter-button:hover {
-            background-color: var(--vscode-button-hoverBackground);
-            color: var(--vscode-button-foreground);
+        .filter-button:hover:not(.active) {
+            background-color: var(--vscode-button-secondaryHoverBackground);
+            border-color: var(--vscode-button-hoverBackground);
+            transform: translateY(-1px);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+        .filter-button:active {
+            transform: translateY(0);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+        .filter-button:focus {
+            outline: 2px solid var(--vscode-focusBorder);
+            outline-offset: 1px;
         }
         .vulnerability-stats {
             font-size: 11px;
@@ -409,5 +429,6 @@ export const getWebviewStyles = (): string => {
             background-color: var(--vscode-button-hoverBackground);
             color: var(--vscode-button-foreground);
         }
+        ${getFilterUtilityStyles()}
     `;
 };

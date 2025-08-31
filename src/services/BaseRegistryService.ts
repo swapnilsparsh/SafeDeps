@@ -60,4 +60,58 @@ export abstract class BaseRegistryService implements IBaseRegistryService {
   protected getCacheKey(packageName: string, version?: string): string {
     return `${packageName}@${version || "latest"}`;
   }
+
+  protected getDefaultHeaders(): Record<string, string> {
+    return {
+      "User-Agent":
+        "SafeDeps VSCode Extension (https://github.com/swapnilsparsh/SafeDeps)",
+      Accept: "application/json",
+      "Accept-Encoding": "gzip, deflate",
+    };
+  }
+
+  protected async makeRequest(
+    url: string,
+    options?: RequestInit
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 seconds timeout
+
+    try {
+      const response = await fetch(url, {
+        method: "GET",
+        headers: this.getDefaultHeaders(),
+        signal: controller.signal,
+        ...options,
+      });
+
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
+    }
+  }
+
+  protected handleApiError(
+    error: any,
+    packageName: string,
+    operation: string
+  ): void {
+    if (error instanceof Error && error.name === "AbortError") {
+      console.error(
+        `Request timeout for ${operation} for package ${packageName}`
+      );
+    } else if (error instanceof Error) {
+      console.error(
+        `Error during ${operation} for package ${packageName}:`,
+        error.message
+      );
+    } else {
+      console.error(
+        `Unknown error during ${operation} for package ${packageName}:`,
+        error
+      );
+    }
+  }
 }

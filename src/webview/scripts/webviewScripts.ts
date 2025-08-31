@@ -1,4 +1,5 @@
 import { getEcosystemDropdownButtonScript } from "../components/EcosystemDropdown";
+import { getFilterUtilityScript } from "../components/FilterUtils";
 
 export const getWebviewJavaScript = (): string => {
   return `
@@ -67,46 +68,87 @@ export const getWebviewJavaScript = (): string => {
             }
         }
 
-        function setVulnerabilityFilter(filter) {
+        function setFilter(filter) {
             currentFilter = filter;
+
+            // Update active state for all filter buttons
             document.querySelectorAll('.filter-button').forEach(btn => {
                 btn.classList.remove('active');
             });
-            document.querySelector(\`[data-filter="\${filter}"]\`).classList.add('active');
 
-            if (lastData && lastCommand === 'scanEcosystem') {
-                renderEcosystemDependencies(lastData);
+            // Find and activate the selected filter button
+            const filterButton = document.querySelector(\`[data-filter="\${filter}"]\`);
+            if (filterButton) {
+                filterButton.classList.add('active');
+            }
+
+            // Re-render based on current command type
+            if (lastData && lastCommand) {
+                switch (lastCommand) {
+                    case 'scanDependencies':
+                        renderDependencies(lastData, false);
+                        break;
+                    case 'scanEcosystem':
+                        renderEcosystemDependencies(lastData, false);
+                        break;
+                    case 'scanAllEcosystems':
+                        renderAllEcosystemsDependencies(lastData, false);
+                        break;
+                }
             }
         }
 
-        function setEcosystemFilter(filter) {
-            currentFilter = filter;
-            document.querySelectorAll('.filter-button').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            document.querySelector(\`[data-filter="\${filter}"]\`).classList.add('active');
+        // Backward compatibility functions
+        function setVulnerabilityFilter(filter) {
+            setFilter(filter);
+        }
 
-            if (lastData && lastCommand === 'scanAllEcosystems') {
-                renderAllEcosystemsDependencies(lastData);
-            } else if (lastData && lastCommand === 'scanEcosystem') {
-                renderEcosystemDependencies(lastData);
-            }
+        function setEcosystemFilter(filter) {
+            setFilter(filter);
         }
 
         function shouldShowDependency(dep) {
             if (currentFilter === 'all') return true;
+
             if (currentFilter === 'vulnerable') {
                 return dep.vulnerabilities && dep.vulnerabilities.length > 0;
             }
+
             if (currentFilter === 'outdated') {
                 return dep.metadata && dep.metadata.isOutdated;
             }
+
             if (currentFilter === 'unknown-license') {
                 return dep.metadata && dep.metadata.hasUnknownLicense;
             }
 
+            // Handle severity-based filters
             const severityFilter = currentFilter.toUpperCase();
-            return dep.vulnerabilities && dep.vulnerabilities.some(vuln => vuln.severity === severityFilter);
+            return dep.vulnerabilities && dep.vulnerabilities.some(vuln =>
+                vuln.severity && vuln.severity.toUpperCase() === severityFilter
+            );
+        }
+
+        function clearFilters() {
+            setFilter('all');
+        }
+
+        function getFilterCount(filter) {
+            if (!lastData) return 0;
+
+            let count = 0;
+            if (lastCommand === 'scanEcosystem' || lastCommand === 'scanAllEcosystems') {
+                lastData.files.forEach(fileData => {
+                    count += fileData.dependencies.filter(dep => {
+                        const tempFilter = currentFilter;
+                        currentFilter = filter;
+                        const result = shouldShowDependency(dep);
+                        currentFilter = tempFilter;
+                        return result;
+                    }).length;
+                });
+            }
+            return count;
         }
 
         function openFile(filePath) {
@@ -344,14 +386,14 @@ export const getWebviewJavaScript = (): string => {
                 </div>
                 <div class="filter-bar">
                     <span style="font-size: 11px; font-weight: 500;">Filter:</span>
-                    <button class="filter-button active" data-filter="all" onclick="setEcosystemFilter('all')">All</button>
-                    \${hasVulnerabilities ? \`<button class="filter-button" data-filter="vulnerable" onclick="setEcosystemFilter('vulnerable')">Vulnerable Only</button>\` : ''}
-                    \${hasOutdated ? \`<button class="filter-button" data-filter="outdated" onclick="setEcosystemFilter('outdated')">Outdated Only</button>\` : ''}
-                    \${hasUnknownLicense ? \`<button class="filter-button" data-filter="unknown-license" onclick="setEcosystemFilter('unknown-license')">Unknown License</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.critical > 0 ? \`<button class="filter-button" data-filter="critical" onclick="setEcosystemFilter('critical')">Critical (\${summary.vulnerabilityBreakdown.critical})</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.high > 0 ? \`<button class="filter-button" data-filter="high" onclick="setEcosystemFilter('high')">High (\${summary.vulnerabilityBreakdown.high})</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.medium > 0 ? \`<button class="filter-button" data-filter="medium" onclick="setEcosystemFilter('medium')">Medium (\${summary.vulnerabilityBreakdown.medium})</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.low > 0 ? \`<button class="filter-button" data-filter="low" onclick="setEcosystemFilter('low')">Low (\${summary.vulnerabilityBreakdown.low})</button>\` : ''}
+                    <button class="filter-button \${currentFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="setFilter('all')">All</button>
+                    \${hasVulnerabilities ? \`<button class="filter-button \${currentFilter === 'vulnerable' ? 'active' : ''}" data-filter="vulnerable" onclick="setFilter('vulnerable')">Vulnerable Only</button>\` : ''}
+                    \${hasOutdated ? \`<button class="filter-button \${currentFilter === 'outdated' ? 'active' : ''}" data-filter="outdated" onclick="setFilter('outdated')">Outdated Only</button>\` : ''}
+                    \${hasUnknownLicense ? \`<button class="filter-button \${currentFilter === 'unknown-license' ? 'active' : ''}" data-filter="unknown-license" onclick="setFilter('unknown-license')">Unknown License</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.critical > 0 ? \`<button class="filter-button \${currentFilter === 'critical' ? 'active' : ''}" data-filter="critical" onclick="setFilter('critical')">Critical (\${summary.vulnerabilityBreakdown.critical})</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.high > 0 ? \`<button class="filter-button \${currentFilter === 'high' ? 'active' : ''}" data-filter="high" onclick="setFilter('high')">High (\${summary.vulnerabilityBreakdown.high})</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.medium > 0 ? \`<button class="filter-button \${currentFilter === 'medium' ? 'active' : ''}" data-filter="medium" onclick="setFilter('medium')">Medium (\${summary.vulnerabilityBreakdown.medium})</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.low > 0 ? \`<button class="filter-button \${currentFilter === 'low' ? 'active' : ''}" data-filter="low" onclick="setFilter('low')">Low (\${summary.vulnerabilityBreakdown.low})</button>\` : ''}
                 </div>
                 <div class="action-bar">
                     <button class="action-button" onclick="expandAllFiles()">📂 Expand All</button>
@@ -609,14 +651,14 @@ export const getWebviewJavaScript = (): string => {
                 </div>
                 <div class="filter-bar">
                     <span style="font-size: 11px; font-weight: 500;">Filter:</span>
-                    <button class="filter-button active" data-filter="all" onclick="setEcosystemFilter('all')">All</button>
-                    \${hasVulnerabilities ? \`<button class="filter-button" data-filter="vulnerable" onclick="setEcosystemFilter('vulnerable')">Vulnerable Only</button>\` : ''}
-                    \${hasOutdated ? \`<button class="filter-button" data-filter="outdated" onclick="setEcosystemFilter('outdated')">Outdated Only</button>\` : ''}
-                    \${hasUnknownLicense ? \`<button class="filter-button" data-filter="unknown-license" onclick="setEcosystemFilter('unknown-license')">Unknown License</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.critical > 0 ? \`<button class="filter-button" data-filter="critical" onclick="setEcosystemFilter('critical')">Critical (\${summary.vulnerabilityBreakdown.critical})</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.high > 0 ? \`<button class="filter-button" data-filter="high" onclick="setEcosystemFilter('high')">High (\${summary.vulnerabilityBreakdown.high})</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.medium > 0 ? \`<button class="filter-button" data-filter="medium" onclick="setEcosystemFilter('medium')">Medium (\${summary.vulnerabilityBreakdown.medium})</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.low > 0 ? \`<button class="filter-button" data-filter="low" onclick="setEcosystemFilter('low')">Low (\${summary.vulnerabilityBreakdown.low})</button>\` : ''}
+                    <button class="filter-button \${currentFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="setFilter('all')">All</button>
+                    \${hasVulnerabilities ? \`<button class="filter-button \${currentFilter === 'vulnerable' ? 'active' : ''}" data-filter="vulnerable" onclick="setFilter('vulnerable')">Vulnerable Only</button>\` : ''}
+                    \${hasOutdated ? \`<button class="filter-button \${currentFilter === 'outdated' ? 'active' : ''}" data-filter="outdated" onclick="setFilter('outdated')">Outdated Only</button>\` : ''}
+                    \${hasUnknownLicense ? \`<button class="filter-button \${currentFilter === 'unknown-license' ? 'active' : ''}" data-filter="unknown-license" onclick="setFilter('unknown-license')">Unknown License</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.critical > 0 ? \`<button class="filter-button \${currentFilter === 'critical' ? 'active' : ''}" data-filter="critical" onclick="setFilter('critical')">Critical (\${summary.vulnerabilityBreakdown.critical})</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.high > 0 ? \`<button class="filter-button \${currentFilter === 'high' ? 'active' : ''}" data-filter="high" onclick="setFilter('high')">High (\${summary.vulnerabilityBreakdown.high})</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.medium > 0 ? \`<button class="filter-button \${currentFilter === 'medium' ? 'active' : ''}" data-filter="medium" onclick="setFilter('medium')">Medium (\${summary.vulnerabilityBreakdown.medium})</button>\` : ''}
+                    \${summary.vulnerabilityBreakdown.low > 0 ? \`<button class="filter-button \${currentFilter === 'low' ? 'active' : ''}" data-filter="low" onclick="setFilter('low')">Low (\${summary.vulnerabilityBreakdown.low})</button>\` : ''}
                 </div>
                 <div class="action-bar">
                     <button class="action-button" onclick="expandAllFiles()">📂 Expand All</button>
@@ -800,14 +842,68 @@ export const getWebviewJavaScript = (): string => {
         });
 
         // Request scan results when the webview loads
+        // Initialize filter state and add keyboard shortcuts
         window.addEventListener('DOMContentLoaded', () => {
             if (lastData && lastCommand) {
                 restoreLastData();
             } else {
                 scanDependencies();
             }
+
+            // Add keyboard shortcuts for filters
+            document.addEventListener('keydown', (event) => {
+                if (event.ctrlKey || event.metaKey) {
+                    switch (event.key) {
+                        case '1':
+                            event.preventDefault();
+                            setFilter('all');
+                            break;
+                        case '2':
+                            event.preventDefault();
+                            if (document.querySelector('[data-filter="vulnerable"]')) {
+                                setFilter('vulnerable');
+                            }
+                            break;
+                        case '3':
+                            event.preventDefault();
+                            if (document.querySelector('[data-filter="critical"]')) {
+                                setFilter('critical');
+                            }
+                            break;
+                        case '0':
+                            event.preventDefault();
+                            clearFilters();
+                            break;
+                    }
+                }
+            });
         });
 
+        // Persist filter state in VS Code state
+        function saveFilterState() {
+            const state = vscode.getState() || {};
+            state.currentFilter = currentFilter;
+            vscode.setState(state);
+        }
+
+        function restoreFilterState() {
+            const state = vscode.getState();
+            if (state && state.currentFilter) {
+                currentFilter = state.currentFilter;
+            }
+        }
+
+        // Override setFilter to include state persistence
+        const originalSetFilter = setFilter;
+        setFilter = function(filter) {
+            originalSetFilter(filter);
+            saveFilterState();
+        };
+
+        // Restore filter state on load
+        restoreFilterState();
+
         ${getEcosystemDropdownButtonScript()}
+        ${getFilterUtilityScript()}
     `;
 };

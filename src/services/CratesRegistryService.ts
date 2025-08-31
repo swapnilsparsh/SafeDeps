@@ -40,9 +40,23 @@ export class CratesRegistryService
   implements ICratesRegistryService
 {
   private readonly CRATES_API_URL = "https://crates.io/api/v1";
+  private lastRequestTime = 0;
+  private readonly MIN_REQUEST_INTERVAL = 1000; // 1 second between requests
 
   public getEcosystem(): string {
     return "crates.io";
+  }
+
+  private async rateLimitedRequest(): Promise<void> {
+    const now = Date.now();
+    const timeSinceLastRequest = now - this.lastRequestTime;
+
+    if (timeSinceLastRequest < this.MIN_REQUEST_INTERVAL) {
+      const delay = this.MIN_REQUEST_INTERVAL - timeSinceLastRequest;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+
+    this.lastRequestTime = Date.now();
   }
 
   public async fetchPackageMetadata(
@@ -56,37 +70,74 @@ export class CratesRegistryService
     }
 
     try {
+      // Apply rate limiting to respect crates.io API limits
+      await this.rateLimitedRequest();
+
       const url = `${this.CRATES_API_URL}/crates/${encodeURIComponent(
         packageName
       )}`;
-      const response = await fetch(url);
 
-      if (!response.ok) {
-        if (response.status === 404) {
-          const defaultMetadata = this.createDefaultMetadata(
-            packageName,
-            version || "latest"
-          );
-          this.cache.set(cacheKey, defaultMetadata);
-          return defaultMetadata;
+      try {
+        // Use the base class method for consistent request handling
+        const response = await this.makeRequest(url);
+
+        if (!response.ok) {
+          if (response.status === 404) {
+            console.warn(`Package ${packageName} not found on crates.io`);
+            const defaultMetadata = this.createDefaultMetadata(
+              packageName,
+              version || "latest"
+            );
+            this.cache.set(cacheKey, defaultMetadata);
+            return defaultMetadata;
+          }
+
+          if (response.status === 403) {
+            console.warn(
+              `Access forbidden for package ${packageName}. This might be due to rate limiting or API access restrictions.`
+            );
+            console.info(
+              `Crates.io API Response Headers:`,
+              Object.fromEntries(response.headers.entries())
+            );
+            const defaultMetadata = this.createDefaultMetadata(
+              packageName,
+              version || "latest"
+            );
+            this.cache.set(cacheKey, defaultMetadata);
+            return defaultMetadata;
+          }
+
+          if (response.status === 429) {
+            console.warn(
+              `Rate limited by crates.io API for package ${packageName}. Using cached/default data.`
+            );
+            const defaultMetadata = this.createDefaultMetadata(
+              packageName,
+              version || "latest"
+            );
+            this.cache.set(cacheKey, defaultMetadata);
+            return defaultMetadata;
+          }
+
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+        const data = (await response.json()) as CratesResponse;
+        const metadata = this.mapCratesResponseToMetadata(
+          data,
+          packageName,
+          version
+        );
+
+        this.cache.set(cacheKey, metadata);
+        return metadata;
+      } catch (error) {
+        throw error;
       }
-
-      const data = (await response.json()) as CratesResponse;
-      const metadata = this.mapCratesResponseToMetadata(
-        data,
-        packageName,
-        version
-      );
-
-      this.cache.set(cacheKey, metadata);
-      return metadata;
     } catch (error) {
-      console.error(
-        `Error fetching crates.io metadata for ${packageName}:`,
-        error
-      );
+      this.handleApiError(error, packageName, "fetching crates.io metadata");
+
       const defaultMetadata = this.createDefaultMetadata(
         packageName,
         version || "latest"
@@ -94,6 +145,50 @@ export class CratesRegistryService
       this.cache.set(cacheKey, defaultMetadata);
       return defaultMetadata;
     }
+  }
+
+  public async fetchMultiplePackageMetadata(
+    packages: { name: string; version?: string }[]
+  ): Promise<Map<string, PackageMetadata>> {
+    const results = new Map<string, PackageMetadata>();
+
+    // Process packages in smaller batches to avoid overwhelming the API
+    const batchSize = 5;
+    const batches = [];
+
+    for (let i = 0; i < packages.length; i += batchSize) {
+      batches.push(packages.slice(i, i + batchSize));
+    }
+
+    for (const batch of batches) {
+      const batchPromises = batch.map(async (pkg) => {
+        try {
+          const metadata = await this.fetchPackageMetadata(
+            pkg.name,
+            pkg.version
+          );
+          results.set(pkg.name, metadata);
+        } catch (error) {
+          console.error(`Failed to fetch metadata for ${pkg.name}:`, error);
+          // Add default metadata for failed packages
+          const defaultMetadata = this.createDefaultMetadata(
+            pkg.name,
+            pkg.version || "latest"
+          );
+          results.set(pkg.name, defaultMetadata);
+        }
+      });
+
+      // Wait for current batch to complete before starting next batch
+      await Promise.all(batchPromises);
+
+      // Add a small delay between batches
+      if (batches.indexOf(batch) < batches.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+
+    return results;
   }
 
   private mapCratesResponseToMetadata(
