@@ -123,8 +123,10 @@ export class GoRegistryService
             )}/@latest`;
             const latestResponse = await fetch(latestUrl);
             if (latestResponse.ok) {
-              const latestData = (await latestResponse.json()) as GoProxyResponse;
-              isOutdated = this.compareVersions(version, latestData.Version) < 0;
+              const latestData =
+                (await latestResponse.json()) as GoProxyResponse;
+              isOutdated =
+                this.compareVersions(version, latestData.Version) < 0;
             }
           } catch {
             // Ignore errors when checking for latest version
@@ -136,7 +138,9 @@ export class GoRegistryService
       const moduleSize = await this.fetchModuleSize(packageName, targetVersion);
 
       // Try to get additional metadata (license, description) from various sources
-      const additionalMetadata = await this.fetchAdditionalMetadata(packageName);
+      const additionalMetadata = await this.fetchAdditionalMetadata(
+        packageName
+      );
 
       return {
         name: packageName,
@@ -156,30 +160,35 @@ export class GoRegistryService
     }
   }
 
-  private async fetchModuleSize(packageName: string, version: string): Promise<number> {
+  private async fetchModuleSize(
+    packageName: string,
+    version: string
+  ): Promise<number> {
     try {
       // First try with the specific version
       let zipUrl = `${this.GO_PROXY_URL}/${encodeURIComponent(
         packageName
       )}/@v/${encodeURIComponent(version)}.zip`;
-      
-      let zipResponse = await fetch(zipUrl, { method: 'HEAD' });
-      
+
+      let zipResponse = await fetch(zipUrl, { method: "HEAD" });
+
       // If specific version fails, try with latest
       if (!zipResponse.ok) {
-        const latestUrl = `${this.GO_PROXY_URL}/${encodeURIComponent(packageName)}/@latest`;
+        const latestUrl = `${this.GO_PROXY_URL}/${encodeURIComponent(
+          packageName
+        )}/@latest`;
         const latestResponse = await fetch(latestUrl);
         if (latestResponse.ok) {
           const latestData = (await latestResponse.json()) as GoProxyResponse;
           zipUrl = `${this.GO_PROXY_URL}/${encodeURIComponent(
             packageName
           )}/@v/${encodeURIComponent(latestData.Version)}.zip`;
-          zipResponse = await fetch(zipUrl, { method: 'HEAD' });
+          zipResponse = await fetch(zipUrl, { method: "HEAD" });
         }
       }
-      
+
       if (zipResponse.ok) {
-        const contentLength = zipResponse.headers.get('content-length');
+        const contentLength = zipResponse.headers.get("content-length");
         return contentLength ? parseInt(contentLength, 10) : 0;
       }
       return 0;
@@ -199,7 +208,7 @@ export class GoRegistryService
       if (packageName.startsWith("github.com/")) {
         return await this.fetchGitHubMetadata(packageName);
       }
-      
+
       // For golang.org/x packages, they are BSD-3-Clause licensed
       if (packageName.startsWith("golang.org/x/")) {
         const subProject = packageName.replace("golang.org/x/", "");
@@ -230,10 +239,10 @@ export class GoRegistryService
           };
         }
       }
-      
+
       // For other packages, try to infer repository and use basic info
       const repository = this.inferRepositoryUrl(packageName);
-      
+
       return {
         license: "Unknown",
         description: "",
@@ -257,16 +266,16 @@ export class GoRegistryService
     author: string;
   }> {
     try {
-      const pathParts = packageName.split('/');
+      const pathParts = packageName.split("/");
       const owner = pathParts[1]; // github.com/owner/repo
       const repo = pathParts[2];
-      
+
       const githubUrl = `${this.GITHUB_API_URL}/repos/${owner}/${repo}`;
       const response = await fetch(githubUrl);
-      
+
       if (response.ok) {
         const data = (await response.json()) as GitHubRepoResponse;
-        
+
         return {
           license: data.license?.spdx_id || data.license?.name || "Unknown",
           description: data.description || "",
@@ -274,7 +283,7 @@ export class GoRegistryService
           author: owner,
         };
       }
-      
+
       // Fallback if GitHub API fails
       return {
         license: "Unknown",
@@ -284,7 +293,7 @@ export class GoRegistryService
       };
     } catch {
       return {
-        license: "Unknown", 
+        license: "Unknown",
         description: "",
         repository: this.inferRepositoryUrl(packageName),
         author: "",
@@ -295,7 +304,7 @@ export class GoRegistryService
   private inferRepositoryUrl(packageName: string): string {
     // Common patterns for Go module paths
     if (packageName.startsWith("github.com/")) {
-      const pathParts = packageName.split('/');
+      const pathParts = packageName.split("/");
       return `https://github.com/${pathParts[1]}/${pathParts[2]}`;
     }
     if (packageName.startsWith("gitlab.com/")) {
