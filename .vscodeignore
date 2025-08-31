@@ -1,8 +1,11 @@
+# Build outputs
 .vscode/**
 .vscode-test/**
 out/**
 node_modules/**
 src/**
+
+# Development files
 .gitignore
 .yarnrc
 esbuild.js
@@ -12,3 +15,16 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 **/.vscode-test.*
+
+# Documentation
+CONTRIBUTING.md
+
+# Logs and temp files
+*.log
+.DS_Store
+Thumbs.db
+
+# Package manager files
+package-lock.json
+yarn.lock
+.npmrc

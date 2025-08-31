@@ -1,13 +1,50 @@
 {
   "name": "safedeps",
-  "displayName": "SafeDeps",
-  "description": "A VS Code extension for dependency safety checks",
-  "version": "0.0.1",
+  "displayName": "SafeDeps - Dependency Security Scanner",
+  "description": "Comprehensive dependency security scanner supporting npm, Python, Go, Rust, PHP, Ruby, and Java. Real-time vulnerability detection, license compliance, and package analysis.",
+  "version": "1.0.0",
+  "publisher": "swapnilsparsh",
+  "author": {
+    "name": "Swapnil Sparsh",
+    "email": "arezonalucky55@gmail.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/swapnilsparsh/SafeDeps.git"
+  },
+  "bugs": {
+    "url": "https://github.com/swapnilsparsh/SafeDeps/issues"
+  },
+  "homepage": "https://github.com/swapnilsparsh/SafeDeps#readme",
+  "galleryBanner": {
+    "color": "#1e1e1e",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.101.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Linters",
+    "Extension Packs"
+  ],
+  "keywords": [
+    "security",
+    "vulnerabilities",
+    "dependencies",
+    "npm",
+    "python",
+    "go",
+    "rust",
+    "php",
+    "ruby",
+    "java",
+    "package-manager",
+    "compliance",
+    "license",
+    "osv",
+    "safety"
   ],
   "activationEvents": [],
   "main": "./dist/extension.js",
@@ -17,7 +54,7 @@
         {
           "id": "safedeps-explorer",
           "title": "SafeDeps",
-          "icon": "media/icon.svg"
+          "icon": "media/icon.png"
         }
       ]
     },
@@ -28,7 +65,7 @@
           "name": "SafeDeps",
           "type": "webview",
           "when": "true",
-          "icon": "media/icon.svg"
+          "icon": "media/icon.png"
         }
       ]
     },
@@ -57,7 +94,7 @@
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
     "build:webview": "vite build",
     "watch:webview": "vite build --watch",
-    "package": "npm run check-types && npm run lint && npm run build:webview && node esbuild.js --production",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
     "compile-tests": "tsc -p . --outDir out",
     "watch-tests": "tsc -p . -w --outDir out",
     "pretest": "npm run compile-tests && npm run compile && npm run lint",
