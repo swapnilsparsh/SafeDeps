@@ -15,6 +15,8 @@ interface PyPIResponse {
     summary?: string;
     description?: string;
     license?: string;
+    license_expression?: string; // Modern PyPI API field
+    license_files?: string[]; // Additional license info
     author?: string;
     author_email?: string;
     home_page?: string;
@@ -52,16 +54,21 @@ export class PyPIRegistryService
     }
 
     try {
-      const url = version
-        ? `${this.PYPI_API_URL}/${encodeURIComponent(
-            packageName
-          )}/${encodeURIComponent(version)}/json`
-        : `${this.PYPI_API_URL}/${encodeURIComponent(packageName)}/json`;
+      // Always use the general endpoint to get complete release data
+      // The specific version endpoint doesn't include releases information
+      const url = `${this.PYPI_API_URL}/${encodeURIComponent(
+        packageName
+      )}/json`;
 
       const response = await fetch(url);
 
       if (!response.ok) {
         if (response.status === 404) {
+          console.warn(
+            `PyPI package not found: ${packageName} version ${
+              version || "latest"
+            }`
+          );
           const defaultMetadata = this.createDefaultMetadata(
             packageName,
             version || "latest"
@@ -73,6 +80,14 @@ export class PyPIRegistryService
       }
 
       const data = (await response.json()) as PyPIResponse;
+
+      // Validate the response data
+      if (!data || !data.info) {
+        throw new Error(
+          `Invalid PyPI response: missing info object for ${packageName}`
+        );
+      }
+
       const metadata = this.mapPyPIResponseToMetadata(
         data,
         packageName,
@@ -92,6 +107,24 @@ export class PyPIRegistryService
     }
   }
 
+  private cleanVersionString(version: string): string {
+    // Remove version operators (==, >=, <=, >, <, ~=, !=) and return just the version number
+    // Also handle complex version specs like ">=1.0.0,<2.0.0" by taking the first version
+    const cleaned = version.replace(/^(==|>=|<=|>|<|~=|!=)/, "").trim();
+
+    // Handle comma-separated version specs by taking the first part
+    const firstVersion = cleaned.split(",")[0].trim();
+
+    // Encode the cleaned version for URL use
+    return encodeURIComponent(firstVersion);
+  }
+
+  private getCleanVersionForComparison(version: string): string {
+    // Same as cleanVersionString but without encoding - for internal comparison
+    const cleaned = version.replace(/^(==|>=|<=|>|<|~=|!=)/, "").trim();
+    return cleaned.split(",")[0].trim();
+  }
+
   private mapPyPIResponseToMetadata(
     data: PyPIResponse,
     requestedName: string,
@@ -99,29 +132,76 @@ export class PyPIRegistryService
   ): PackageMetadata {
     const info = data.info;
     const currentVersion = info.version;
-    const targetVersion = requestedVersion || currentVersion;
 
-    // Check if package is outdated
-    const isOutdated = requestedVersion
-      ? this.compareVersions(requestedVersion, currentVersion) < 0
-      : false;
+    // Clean the requested version for lookup in releases
+    const cleanRequestedVersion = requestedVersion
+      ? this.getCleanVersionForComparison(requestedVersion)
+      : undefined;
 
-    // Get upload time for the specific version
+    // Use cleaned requested version or current version for release lookup
+    const targetVersion = cleanRequestedVersion || currentVersion;
+    const originalRequestedVersion = requestedVersion;
+
+    // Check if package is outdated using the original version string
+    const isOutdated =
+      originalRequestedVersion && cleanRequestedVersion
+        ? this.compareVersions(cleanRequestedVersion, currentVersion) < 0
+        : false;
+
+    // Get upload time for the specific version from releases
     let lastUpdated = new Date();
     let packageSize = 0;
 
-    if (data.releases[targetVersion]) {
-      const releases = data.releases[targetVersion];
-      if (releases.length > 0) {
-        lastUpdated = new Date(releases[0].upload_time);
-        packageSize = releases[0].size || 0;
+    // Try to find the release data using the target version
+    if (data.releases && typeof data.releases === "object") {
+      // Try different version formats to find the release
+      const versionKeys = [
+        targetVersion,
+        // Try without 'v' prefix if present
+        targetVersion.replace(/^v/, ""),
+        // Try exact match from the releases keys
+        Object.keys(data.releases).find(
+          (key) =>
+            key === targetVersion ||
+            key === targetVersion.replace(/^v/, "") ||
+            key.replace(/^v/, "") === targetVersion.replace(/^v/, "")
+        ),
+      ].filter(Boolean);
+
+      for (const versionKey of versionKeys) {
+        if (
+          versionKey &&
+          data.releases[versionKey] &&
+          Array.isArray(data.releases[versionKey])
+        ) {
+          const releases = data.releases[versionKey];
+          if (releases.length > 0) {
+            // Use the wheel file if available, otherwise use the first file
+            const preferredRelease =
+              releases.find((r) => r.packagetype === "bdist_wheel") ||
+              releases[0];
+            lastUpdated = new Date(preferredRelease.upload_time);
+            packageSize = preferredRelease.size || 0;
+            break;
+          }
+        }
       }
     }
 
-    // Extract license information
-    let license = info.license || "Unknown";
-    if (!license || license === "Unknown" || license.trim() === "") {
-      // Try to extract from classifiers
+    // Extract license information using modern PyPI API fields
+    let license = "Unknown";
+
+    // Priority order: license_expression (modern) > license (legacy) > classifiers (fallback)
+    if (info.license_expression && info.license_expression.trim() !== "") {
+      license = info.license_expression.trim();
+    } else if (
+      info.license &&
+      info.license.trim() !== "" &&
+      info.license !== "UNKNOWN"
+    ) {
+      license = info.license.trim();
+    } else {
+      // Try to extract from classifiers as fallback
       const licenseClassifiers =
         info.classifiers?.filter((c) => c.startsWith("License ::")) || [];
       if (licenseClassifiers.length > 0) {

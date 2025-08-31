@@ -11,6 +11,12 @@ export interface IGoRegistryService {
 interface GoProxyResponse {
   Version: string;
   Time: string;
+  Origin?: {
+    VCS: string;
+    URL: string;
+    Subdir?: string;
+    Ref?: string;
+  };
 }
 
 interface GoModuleInfo {
@@ -24,12 +30,28 @@ interface GoModuleInfo {
   };
 }
 
+interface GitHubRepoResponse {
+  name: string;
+  description: string | null;
+  license: {
+    key: string;
+    name: string;
+    spdx_id: string;
+  } | null;
+  size: number;
+  updated_at: string;
+  clone_url: string;
+  homepage: string | null;
+  language: string;
+  stargazers_count: number;
+}
+
 export class GoRegistryService
   extends BaseRegistryService
   implements IGoRegistryService
 {
   private readonly GO_PROXY_URL = "https://proxy.golang.org";
-  private readonly GO_MOD_URL = "https://pkg.go.dev";
+  private readonly GITHUB_API_URL = "https://api.github.com";
 
   public getEcosystem(): string {
     return "Go";
@@ -101,10 +123,8 @@ export class GoRegistryService
             )}/@latest`;
             const latestResponse = await fetch(latestUrl);
             if (latestResponse.ok) {
-              const latestData =
-                (await latestResponse.json()) as GoProxyResponse;
-              isOutdated =
-                this.compareVersions(version, latestData.Version) < 0;
+              const latestData = (await latestResponse.json()) as GoProxyResponse;
+              isOutdated = this.compareVersions(version, latestData.Version) < 0;
             }
           } catch {
             // Ignore errors when checking for latest version
@@ -112,19 +132,20 @@ export class GoRegistryService
         }
       }
 
-      // Try to get additional metadata from pkg.go.dev
-      const additionalMetadata = await this.fetchAdditionalMetadata(
-        packageName
-      );
+      // Get module size from ZIP file
+      const moduleSize = await this.fetchModuleSize(packageName, targetVersion);
+
+      // Try to get additional metadata (license, description) from various sources
+      const additionalMetadata = await this.fetchAdditionalMetadata(packageName);
 
       return {
         name: packageName,
         version: targetVersion,
         license: additionalMetadata.license,
         lastUpdated: lastUpdated,
-        size: 0, // Go proxy doesn't provide size information
+        size: moduleSize,
         description: additionalMetadata.description,
-        author: "",
+        author: additionalMetadata.author,
         homepage: `https://pkg.go.dev/${packageName}`,
         repository: additionalMetadata.repository,
         isOutdated: isOutdated,
@@ -135,26 +156,138 @@ export class GoRegistryService
     }
   }
 
+  private async fetchModuleSize(packageName: string, version: string): Promise<number> {
+    try {
+      // First try with the specific version
+      let zipUrl = `${this.GO_PROXY_URL}/${encodeURIComponent(
+        packageName
+      )}/@v/${encodeURIComponent(version)}.zip`;
+      
+      let zipResponse = await fetch(zipUrl, { method: 'HEAD' });
+      
+      // If specific version fails, try with latest
+      if (!zipResponse.ok) {
+        const latestUrl = `${this.GO_PROXY_URL}/${encodeURIComponent(packageName)}/@latest`;
+        const latestResponse = await fetch(latestUrl);
+        if (latestResponse.ok) {
+          const latestData = (await latestResponse.json()) as GoProxyResponse;
+          zipUrl = `${this.GO_PROXY_URL}/${encodeURIComponent(
+            packageName
+          )}/@v/${encodeURIComponent(latestData.Version)}.zip`;
+          zipResponse = await fetch(zipUrl, { method: 'HEAD' });
+        }
+      }
+      
+      if (zipResponse.ok) {
+        const contentLength = zipResponse.headers.get('content-length');
+        return contentLength ? parseInt(contentLength, 10) : 0;
+      }
+      return 0;
+    } catch {
+      return 0;
+    }
+  }
+
   private async fetchAdditionalMetadata(packageName: string): Promise<{
     license: string;
     description: string;
     repository: string;
+    author: string;
   }> {
     try {
-      // This is a simplified approach - in a real implementation,
-      // you might want to parse the pkg.go.dev page or use other sources
-      const repository = this.inferRepositoryUrl(packageName);
+      // For GitHub packages, fetch from GitHub API
+      if (packageName.startsWith("github.com/")) {
+        return await this.fetchGitHubMetadata(packageName);
+      }
+      
+      // For golang.org/x packages, they are BSD-3-Clause licensed
+      if (packageName.startsWith("golang.org/x/")) {
+        const subProject = packageName.replace("golang.org/x/", "");
+        return {
+          license: "BSD-3-Clause",
+          description: `Go ${subProject} package`,
+          repository: `https://go.googlesource.com/${subProject}`,
+          author: "Go Team",
+        };
+      }
 
+      // For google.golang.org packages
+      if (packageName.startsWith("google.golang.org/")) {
+        if (packageName === "google.golang.org/protobuf") {
+          return {
+            license: "BSD-3-Clause",
+            description: "Go Protocol Buffers",
+            repository: "https://go.googlesource.com/protobuf",
+            author: "Go Team",
+          };
+        }
+        if (packageName === "google.golang.org/appengine") {
+          return {
+            license: "Apache-2.0",
+            description: "Go App Engine SDK",
+            repository: "https://github.com/golang/appengine",
+            author: "Go Team",
+          };
+        }
+      }
+      
+      // For other packages, try to infer repository and use basic info
+      const repository = this.inferRepositoryUrl(packageName);
+      
       return {
-        license: "Unknown", // License detection would require parsing the source
+        license: "Unknown",
         description: "",
         repository: repository,
+        author: "",
       };
     } catch {
       return {
         license: "Unknown",
         description: "",
-        repository: "",
+        repository: this.inferRepositoryUrl(packageName),
+        author: "",
+      };
+    }
+  }
+
+  private async fetchGitHubMetadata(packageName: string): Promise<{
+    license: string;
+    description: string;
+    repository: string;
+    author: string;
+  }> {
+    try {
+      const pathParts = packageName.split('/');
+      const owner = pathParts[1]; // github.com/owner/repo
+      const repo = pathParts[2];
+      
+      const githubUrl = `${this.GITHUB_API_URL}/repos/${owner}/${repo}`;
+      const response = await fetch(githubUrl);
+      
+      if (response.ok) {
+        const data = (await response.json()) as GitHubRepoResponse;
+        
+        return {
+          license: data.license?.spdx_id || data.license?.name || "Unknown",
+          description: data.description || "",
+          repository: `https://github.com/${owner}/${repo}`,
+          author: owner,
+        };
+      }
+      
+      // Fallback if GitHub API fails
+      return {
+        license: "Unknown",
+        description: "",
+        repository: `https://github.com/${owner}/${repo}`,
+        author: owner,
+      };
+    } catch {
+      return {
+        license: "Unknown", 
+        description: "",
+        repository: this.inferRepositoryUrl(packageName),
+        author: "",
       };
     }
   }
@@ -162,13 +295,27 @@ export class GoRegistryService
   private inferRepositoryUrl(packageName: string): string {
     // Common patterns for Go module paths
     if (packageName.startsWith("github.com/")) {
-      return `https://${packageName}`;
+      const pathParts = packageName.split('/');
+      return `https://github.com/${pathParts[1]}/${pathParts[2]}`;
     }
     if (packageName.startsWith("gitlab.com/")) {
       return `https://${packageName}`;
     }
     if (packageName.startsWith("bitbucket.org/")) {
       return `https://${packageName}`;
+    }
+    if (packageName.startsWith("golang.org/x/")) {
+      const subProject = packageName.replace("golang.org/x/", "");
+      return `https://go.googlesource.com/${subProject}`;
+    }
+    if (packageName.startsWith("google.golang.org/")) {
+      // Map google.golang.org packages to their actual repositories
+      if (packageName === "google.golang.org/protobuf") {
+        return "https://go.googlesource.com/protobuf";
+      }
+      if (packageName === "google.golang.org/appengine") {
+        return "https://github.com/golang/appengine";
+      }
     }
 
     return "";
