@@ -48,6 +48,9 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
         case "openFile":
           this._openFile(message.filePath);
           break;
+        case "openUrl":
+          this._openUrl(message.url);
+          break;
         case "restoreData":
           this._restoreLastData();
           break;
@@ -151,6 +154,14 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
       await vscode.window.showTextDocument(document);
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to open file: ${filePath}`);
+    }
+  }
+
+  private async _openUrl(url: string): Promise<void> {
+    try {
+      await vscode.env.openExternal(vscode.Uri.parse(url));
+    } catch (error) {
+      vscode.window.showErrorMessage(`Failed to open URL: ${url}`);
     }
   }
 

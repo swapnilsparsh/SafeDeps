@@ -229,6 +229,66 @@ export const getWebviewJavaScript = (): string => {
             return colors[ecosystem] || '#666666';
         }
 
+        function getRegistryUrl(packageName, ecosystem) {
+            const registryUrls = {
+                'npm': (name) => \`https://www.npmjs.com/package/\${encodeURIComponent(name)}\`,
+                'PyPI': (name) => \`https://pypi.org/project/\${encodeURIComponent(name)}/\`,
+                'Go': (name) => \`https://pkg.go.dev/\${encodeURIComponent(name)}\`,
+                'crates.io': (name) => \`https://crates.io/crates/\${encodeURIComponent(name)}\`,
+                'Maven': (name) => {
+                    // For Maven, we need to handle group:artifact format
+                    // If it contains a colon, split it; otherwise assume it's just the artifact
+                    if (name.includes(':')) {
+                        const [group, artifact] = name.split(':');
+                        return \`https://mvnrepository.com/artifact/\${encodeURIComponent(group)}/\${encodeURIComponent(artifact)}\`;
+                    }
+                    return \`https://mvnrepository.com/search?q=\${encodeURIComponent(name)}\`;
+                },
+                'RubyGems': (name) => \`https://rubygems.org/gems/\${encodeURIComponent(name)}\`,
+                'Packagist': (name) => \`https://packagist.org/packages/\${encodeURIComponent(name)}\`
+            };
+
+            // Handle ecosystem aliases
+            const ecosystemMap = {
+                'javascript': 'npm',
+                'typescript': 'npm',
+                'JavaScript/TypeScript': 'npm',
+                'python': 'PyPI',
+                'Python': 'PyPI',
+                'go': 'Go',
+                'golang': 'Go',
+                'rust': 'crates.io',
+                'Rust': 'crates.io',
+                'crates': 'crates.io',
+                'java': 'Maven',
+                'Java': 'Maven',
+                'ruby': 'RubyGems',
+                'Ruby': 'RubyGems',
+                'php': 'Packagist',
+                'PHP': 'Packagist'
+            };
+
+            const normalizedEcosystem = ecosystemMap[ecosystem] || ecosystem;
+            const urlGenerator = registryUrls[normalizedEcosystem];
+
+            if (urlGenerator) {
+                return urlGenerator(packageName);
+            }
+
+            // Fallback for unknown ecosystems
+            return null;
+        }
+
+        function openPackageRegistry(packageName, ecosystem) {
+            const url = getRegistryUrl(packageName, ecosystem);
+            if (url) {
+                vscode.postMessage({
+                    command: 'openUrl',
+                    url: url
+                });
+            }
+        }
+
         function renderDependencies(summary, resetLoadingState = true) {
             if (resetLoadingState) {
                 setLoadingState(false);
@@ -508,7 +568,9 @@ export const getWebviewJavaScript = (): string => {
                                     <span style="width: 8px; height: 8px; border-radius: 50%; background-color: \${typeColor}; margin-right: 8px; flex-shrink: 0;"></span>
                                     <div style="flex: 1;">
                                         <div class="file-name">
-                                            \${dep.name}
+                                            <span class="package-name-clickable" onclick="openPackageRegistry('\${dep.name.replace(/'/g, "\\'")}', '\${summary.ecosystem}')" title="Open in \${summary.ecosystem} registry">
+                                                \${dep.name}
+                                            </span>
                                             \${alertBadges}
                                         </div>
                                         <div class="file-path">\${dep.version}</div>
@@ -793,7 +855,9 @@ export const getWebviewJavaScript = (): string => {
                                         <span style="width: 8px; height: 8px; border-radius: 50%; background-color: \${typeColor}; margin-right: 8px; flex-shrink: 0;"></span>
                                         <div style="flex: 1;">
                                             <div class="file-name">
-                                                \${dep.name}
+                                                <span class="package-name-clickable" onclick="openPackageRegistry('\${dep.name.replace(/'/g, "\\'")}', '\${ecosystem}')" title="Open in \${ecosystem} registry">
+                                                    \${dep.name}
+                                                </span>
                                                 \${alertBadges}
                                             </div>
                                             <div class="file-path">\${dep.version}</div>

@@ -226,6 +226,23 @@ export const getWebviewStyles = (): string => {
             border-left-color: var(--vscode-errorForeground);
             background-color: rgba(255, 99, 71, 0.1);
         }
+        .package-name-clickable {
+            cursor: pointer;
+            text-decoration: none;
+            color: var(--vscode-textLink-foreground);
+            transition: color 0.2s ease;
+            border-radius: 2px;
+            padding: 1px 2px;
+        }
+        .package-name-clickable:hover {
+            color: var(--vscode-textLink-activeForeground);
+            background-color: var(--vscode-textLink-activeForeground);
+            background-color: rgba(14, 99, 156, 0.1);
+            text-decoration: underline;
+        }
+        .package-name-clickable:active {
+            transform: translateY(0);
+        }
         .size-indicator {
             display: inline-block;
             width: 6px;
