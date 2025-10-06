@@ -14,7 +14,7 @@ export const getWebviewButtons = (): string => {
             🔍 Scan Workspace
         </button>
         ${getEcosystemDropdownButton()}
-        <button class="scan-button" onclick="scanAllEcosystems()">
+        <button class="scan-button" id="allEcosystemsBtn" onclick="scanAllEcosystems()">
             🌐 All Ecosystems
         </button>
     `;

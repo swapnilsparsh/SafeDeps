@@ -1,10 +1,10 @@
 export const getEcosystemDropdownButton = (): string => {
   return `
     <div class="ecosystem-dropdown">
-      <button class="ecosystem-btn" id="ecosystemBtn" onclick="toggleEcosystemDropdown()">
-        <span class="ecosystem-btn-icon">🎯</span>
-        <span class="ecosystem-btn-text">Select Ecosystem</span>
-        <span class="ecosystem-btn-arrow">▼</span>
+      <button class="ecosystem-btn" id="ecosystemBtn" onclick="handleEcosystemButtonClick()">
+        <span class="ecosystem-btn-icon" id="ecosystemBtnIcon">🎯</span>
+        <span class="ecosystem-btn-text" id="ecosystemBtnText">Select Ecosystem</span>
+        <span class="ecosystem-btn-arrow" id="ecosystemBtnArrow">▼</span>
       </button>
       <div class="ecosystem-menu" id="ecosystemMenu">
         <div class="ecosystem-menu-header">Available Ecosystems</div>
@@ -63,6 +63,10 @@ export const getEcosystemDropdownButtonStyles = (): string => {
       font-size: 10px;
       opacity: 0.6;
       transition: transform 0.2s ease;
+    }
+
+    .ecosystem-btn-arrow.hidden {
+      display: none;
     }
 
     .ecosystem-btn.open .ecosystem-btn-arrow {
@@ -265,6 +269,62 @@ export const getEcosystemDropdownButtonScript = (): string => {
       availableEcosystems = ecosystems || [];
       ecosystemFiles = filesByEcosystem || {};
       populateEcosystemMenu();
+      updateButtonForSingleEcosystem();
+    }
+
+    function updateButtonForSingleEcosystem() {
+      const btn = document.getElementById('ecosystemBtn');
+      const btnIcon = document.getElementById('ecosystemBtnIcon');
+      const btnText = document.getElementById('ecosystemBtnText');
+      const btnArrow = document.getElementById('ecosystemBtnArrow');
+      const allEcosystemsBtn = document.getElementById('allEcosystemsBtn');
+
+      if (!btn || !btnIcon || !btnText || !btnArrow) return;
+
+      if (availableEcosystems.length === 1) {
+        // Single ecosystem detected - update button to show direct action
+        const detectedLanguage = availableEcosystems[0];
+        const config = ecosystemConfig[detectedLanguage] || {
+          icon: '📄',
+          name: detectedLanguage,
+          desc: 'Package ecosystem',
+          files: [],
+          ecosystem: detectedLanguage
+        };
+
+        btnIcon.textContent = config.icon;
+        btnText.textContent = \`Analyze \${config.name}\`;
+        btnArrow.classList.add('hidden');
+        btn.dataset.singleEcosystem = config.ecosystem;
+
+        // Hide "All Ecosystems" button when only one ecosystem is detected
+        if (allEcosystemsBtn) {
+          allEcosystemsBtn.style.display = 'none';
+        }
+      } else {
+        // Multiple or no ecosystems - show default dropdown
+        btnIcon.textContent = '🎯';
+        btnText.textContent = 'Select Ecosystem';
+        btnArrow.classList.remove('hidden');
+        delete btn.dataset.singleEcosystem;
+
+        // Show "All Ecosystems" button when multiple ecosystems are detected
+        if (allEcosystemsBtn) {
+          allEcosystemsBtn.style.display = '';
+        }
+      }
+    }
+
+    function handleEcosystemButtonClick() {
+      const btn = document.getElementById('ecosystemBtn');
+
+      // If single ecosystem, directly trigger scan
+      if (btn && btn.dataset.singleEcosystem) {
+        selectEcosystem(btn.dataset.singleEcosystem);
+      } else {
+        // Otherwise, toggle dropdown
+        toggleEcosystemDropdown();
+      }
     }
 
     function populateEcosystemMenu() {
