@@ -11,7 +11,13 @@ export interface IOsvService {
     ecosystem: string
   ): Promise<VulnerabilityInfo[]>;
   checkMultipleVulnerabilities(
-    packages: { name: string; version: string; ecosystem: string }[]
+    packages: { name: string; version: string; ecosystem: string }[],
+    onProgress?: (
+      current: number,
+      total: number,
+      packageName?: string,
+      vulnCount?: number
+    ) => void
   ): Promise<Map<string, VulnerabilityInfo[]>>;
 }
 
@@ -98,9 +104,17 @@ export class OsvService implements IOsvService {
   }
 
   public async checkMultipleVulnerabilities(
-    packages: { name: string; version: string; ecosystem: string }[]
+    packages: { name: string; version: string; ecosystem: string }[],
+    onProgress?: (
+      current: number,
+      total: number,
+      packageName?: string,
+      vulnCount?: number
+    ) => void
   ): Promise<Map<string, VulnerabilityInfo[]>> {
     const results = new Map<string, VulnerabilityInfo[]>();
+    const totalPackages = packages.length;
+    let processedPackages = 0;
 
     const batchSize = 10;
     for (let i = 0; i < packages.length; i += batchSize) {
@@ -114,12 +128,27 @@ export class OsvService implements IOsvService {
             pkg.ecosystem
           );
           results.set(pkg.name, vulnerabilities);
+
+          processedPackages++;
+          if (onProgress) {
+            onProgress(
+              processedPackages,
+              totalPackages,
+              pkg.name,
+              vulnerabilities.length
+            );
+          }
         } catch (error) {
           console.error(
             `Failed to check vulnerabilities for ${pkg.name}:`,
             error
           );
           results.set(pkg.name, []);
+
+          processedPackages++;
+          if (onProgress) {
+            onProgress(processedPackages, totalPackages, pkg.name, 0);
+          }
         }
       });
 

@@ -32,10 +32,148 @@ export const getWebviewJavaScript = (): string => {
             document.getElementById('content').innerHTML = \`
                 <div class="loading">
                     <div class="loading-spinner"></div>
-                    <div>Scanning all ecosystems and checking vulnerabilities...</div>
+                    <div id="progress-message" style="font-size: 14px; font-weight: 500; margin-bottom: 4px;">🚀 Initializing scan...</div>
+                    <div id="progress-bar-container" style="width: 100%; max-width: 500px; height: 10px; background-color: rgba(255, 255, 255, 0.1); border-radius: 5px; margin-top: 16px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);">
+                        <div id="progress-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #007acc, #00a8e8); transition: width 0.3s ease, background 0.5s ease; border-radius: 5px;"></div>
+                    </div>
+                    <div id="progress-details" style="margin-top: 10px; font-size: 12px; color: rgba(255, 255, 255, 0.7); font-family: 'SF Mono', Monaco, 'Courier New', monospace;"></div>
+                    <div id="progress-extra-info" style="margin-top: 8px; font-size: 11px; color: rgba(255, 255, 255, 0.5); font-style: italic; min-height: 16px;"></div>
                 </div>
             \`;
             vscode.postMessage({ command: 'scanAllEcosystems' });
+        }
+
+        function restoreLoadingState(scanType, progress) {
+            setLoadingState(true);
+
+            // Determine the scan type and set appropriate command
+            if (scanType.startsWith('ecosystem:')) {
+                lastCommand = 'scanEcosystem';
+                const ecosystem = scanType.split(':')[1];
+                document.getElementById('content').innerHTML = \`
+                    <div class="loading">
+                        <div class="loading-spinner"></div>
+                        <div id="progress-message" style="font-size: 14px; font-weight: 500; margin-bottom: 4px;">\${progress ? progress.message : '🚀 Scanning \${ecosystem}...'}</div>
+                        <div id="progress-bar-container" style="width: 100%; max-width: 500px; height: 10px; background-color: rgba(255, 255, 255, 0.1); border-radius: 5px; margin-top: 16px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);">
+                            <div id="progress-bar" style="height: 100%; width: \${progress ? progress.percentage : 0}%; background: linear-gradient(90deg, #007acc, #00a8e8); transition: width 0.3s ease, background 0.5s ease; border-radius: 5px;"></div>
+                        </div>
+                        <div id="progress-details" style="margin-top: 10px; font-size: 12px; color: rgba(255, 255, 255, 0.7); font-family: 'SF Mono', Monaco, 'Courier New', monospace;"></div>
+                        <div id="progress-extra-info" style="margin-top: 8px; font-size: 11px; color: rgba(255, 255, 255, 0.5); font-style: italic; min-height: 16px;"></div>
+                    </div>
+                \`;
+            } else if (scanType === 'allEcosystems') {
+                lastCommand = 'scanAllEcosystems';
+                document.getElementById('content').innerHTML = \`
+                    <div class="loading">
+                        <div class="loading-spinner"></div>
+                        <div id="progress-message" style="font-size: 14px; font-weight: 500; margin-bottom: 4px;">\${progress ? progress.message : '🚀 Scanning all ecosystems...'}</div>
+                        <div id="progress-bar-container" style="width: 100%; max-width: 500px; height: 10px; background-color: rgba(255, 255, 255, 0.1); border-radius: 5px; margin-top: 16px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);">
+                            <div id="progress-bar" style="height: 100%; width: \${progress ? progress.percentage : 0}%; background: linear-gradient(90deg, #007acc, #00a8e8); transition: width 0.3s ease, background 0.5s ease; border-radius: 5px;"></div>
+                        </div>
+                        <div id="progress-details" style="margin-top: 10px; font-size: 12px; color: rgba(255, 255, 255, 0.7); font-family: 'SF Mono', Monaco, 'Courier New', monospace;"></div>
+                        <div id="progress-extra-info" style="margin-top: 8px; font-size: 11px; color: rgba(255, 255, 255, 0.5); font-style: italic; min-height: 16px;"></div>
+                    </div>
+                \`;
+            }
+
+            // If we have progress data, update the UI with it
+            if (progress) {
+                updateProgress(progress);
+            }
+        }
+
+        function updateProgress(progress) {
+            const messageEl = document.getElementById('progress-message');
+            const barEl = document.getElementById('progress-bar');
+            const detailsEl = document.getElementById('progress-details');
+            const extraInfoEl = document.getElementById('progress-extra-info');
+
+            if (messageEl) {
+                messageEl.textContent = progress.message;
+            }
+
+            if (barEl) {
+                barEl.style.width = \`\${progress.percentage}%\`;
+
+                // Change color based on progress
+                if (progress.percentage >= 90) {
+                    barEl.style.background = 'linear-gradient(90deg, #28a745, #20c997)'; // Green
+                } else if (progress.percentage >= 65) {
+                    barEl.style.background = 'linear-gradient(90deg, #007acc, #00a8e8)'; // Blue
+                } else {
+                    barEl.style.background = 'linear-gradient(90deg, #007acc, #0087d1)'; // Lighter blue
+                }
+            }
+
+            if (detailsEl) {
+                const detailParts = [];
+
+                // Show current/total
+                if (progress.current !== undefined && progress.total !== undefined) {
+                    detailParts.push(\`\${progress.current} / \${progress.total}\`);
+                }
+
+                // Show percentage
+                detailParts.push(\`\${progress.percentage}%\`);
+
+                // Show elapsed time
+                if (progress.elapsedTime) {
+                    const seconds = Math.floor(progress.elapsedTime / 1000);
+                    if (seconds < 60) {
+                        detailParts.push(\`⏱️ \${seconds}s\`);
+                    } else {
+                        const minutes = Math.floor(seconds / 60);
+                        const remainingSeconds = seconds % 60;
+                        detailParts.push(\`⏱️ \${minutes}m \${remainingSeconds}s\`);
+                    }
+                }
+
+                // Show estimated time remaining
+                if (progress.estimatedTimeRemaining && progress.estimatedTimeRemaining > 1000) {
+                    const seconds = Math.floor(progress.estimatedTimeRemaining / 1000);
+                    if (seconds < 60) {
+                        detailParts.push(\`⏳ ~\${seconds}s left\`);
+                    } else {
+                        const minutes = Math.floor(seconds / 60);
+                        detailParts.push(\`⏳ ~\${minutes}m left\`);
+                    }
+                }
+
+                detailsEl.textContent = detailParts.join(' • ');
+            }
+
+            // Show extra information
+            if (extraInfoEl) {
+                const extraParts = [];
+
+                // Show file/package details
+                if (progress.details) {
+                    extraParts.push(progress.details);
+                }
+
+                // Show statistics
+                if (progress.statistics) {
+                    const stats = [];
+                    if (progress.statistics.dependenciesFound > 0) {
+                        stats.push(\`📦 \${progress.statistics.dependenciesFound} deps\`);
+                    }
+                    if (progress.statistics.vulnerabilitiesFound > 0) {
+                        stats.push(\`🚨 \${progress.statistics.vulnerabilitiesFound} vulns\`);
+                    }
+                    if (stats.length > 0) {
+                        extraParts.push(stats.join(' • '));
+                    }
+                }
+
+                // Show performance metric
+                if (progress.packagesPerSecond && progress.packagesPerSecond > 0) {
+                    const pps = Math.round(progress.packagesPerSecond * 10) / 10;
+                    extraParts.push(\`⚡ \${pps} pkg/s\`);
+                }
+
+                extraInfoEl.textContent = extraParts.join(' | ');
+                extraInfoEl.style.display = extraParts.length > 0 ? 'block' : 'none';
+            }
         }
 
         function setLoadingState(loading) {
@@ -894,6 +1032,12 @@ export const getWebviewJavaScript = (): string => {
                     break;
                 case 'updateAllEcosystemsDependencies':
                     renderAllEcosystemsDependencies(message.data);
+                    break;
+                case 'updateProgress':
+                    updateProgress(message.progress);
+                    break;
+                case 'restoreLoadingState':
+                    restoreLoadingState(message.scanType, message.progress);
                     break;
                 case 'showError':
                     showError(message.error);

@@ -419,7 +419,12 @@ export const getEcosystemDropdownButtonScript = (): string => {
       document.getElementById('content').innerHTML = \`
         <div class="loading">
           <div class="loading-spinner"></div>
-          <div>Analyzing \${ecosystem} dependencies and checking for vulnerabilities...</div>
+          <div id="progress-message" style="font-size: 14px; font-weight: 500; margin-bottom: 4px;">🚀 Initializing \${ecosystem} scan...</div>
+          <div id="progress-bar-container" style="width: 100%; max-width: 500px; height: 10px; background-color: rgba(255, 255, 255, 0.1); border-radius: 5px; margin-top: 16px; overflow: hidden; box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);">
+            <div id="progress-bar" style="height: 100%; width: 0%; background: linear-gradient(90deg, #007acc, #00a8e8); transition: width 0.3s ease, background 0.5s ease; border-radius: 5px;"></div>
+          </div>
+          <div id="progress-details" style="margin-top: 10px; font-size: 12px; color: rgba(255, 255, 255, 0.7); font-family: 'SF Mono', Monaco, 'Courier New', monospace;"></div>
+          <div id="progress-extra-info" style="margin-top: 8px; font-size: 11px; color: rgba(255, 255, 255, 0.5); font-style: italic; min-height: 16px;"></div>
         </div>
       \`;
 
