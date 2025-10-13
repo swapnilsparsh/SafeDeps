@@ -8,12 +8,14 @@ import { PackageJsonParser } from "../parsers/PackageJsonParser";
 import { UnifiedDependencyParser } from "../parsers/UnifiedDependencyParser";
 import { UnifiedRegistryService } from "../services/UnifiedRegistryService";
 import { OsvService } from "../services/OsvService";
+import { ProgressReporter } from "../services/progress";
 
 export class DependencyScanner extends BaseDependencyScanner {
   private packageJsonParser: PackageJsonParser;
   private unifiedParser: UnifiedDependencyParser;
   private unifiedRegistryService: UnifiedRegistryService;
   private osvService: OsvService;
+  private progressReporter: ProgressReporter;
 
   constructor() {
     super();
@@ -21,6 +23,11 @@ export class DependencyScanner extends BaseDependencyScanner {
     this.unifiedParser = new UnifiedDependencyParser();
     this.unifiedRegistryService = new UnifiedRegistryService();
     this.osvService = new OsvService();
+    this.progressReporter = new ProgressReporter();
+  }
+
+  public getProgressReporter(): ProgressReporter {
+    return this.progressReporter;
   }
 
   public async parseAllPackageJsonFiles() {
@@ -250,116 +257,193 @@ export class DependencyScanner extends BaseDependencyScanner {
   }
 
   public async getUnifiedDependencySummaryWithVulnerabilities(): Promise<UnifiedDependencySummary> {
-    const allFiles = await this.parseAllDependencyFiles();
-    let totalDependencies = 0;
-    let vulnerablePackages = 0;
-    let outdatedPackages = 0;
-    let unknownLicensePackages = 0;
-    const ecosystemBreakdown: Record<string, number> = {};
-    const vulnerabilityBreakdown = {
-      low: 0,
-      medium: 0,
-      high: 0,
-      critical: 0,
-      unknown: 0,
-    };
-
-    const uniquePackages = new Map<
-      string,
-      { name: string; version: string; ecosystem: string }
-    >();
-    const allDependencies: {
-      file: import("../types").DependencyFile;
-      dependency: import("../types").PackageDependency;
-    }[] = [];
-
-    for (const fileData of allFiles) {
-      for (const dep of fileData.dependencies) {
-        const key = `${dep.ecosystem}:${dep.name}`;
-        if (!uniquePackages.has(key)) {
-          uniquePackages.set(key, {
-            name: dep.name,
-            version: dep.version,
-            ecosystem: dep.ecosystem,
-          });
-        }
-
-        totalDependencies++;
-        ecosystemBreakdown[dep.ecosystem] =
-          (ecosystemBreakdown[dep.ecosystem] || 0) + 1;
-
-        allDependencies.push({
-          file: fileData.file,
-          dependency: dep,
-        });
-      }
-    }
-
-    // Fetch metadata for all packages
-    const metadataMap =
-      await this.unifiedRegistryService.fetchMultiplePackageMetadata(
-        Array.from(uniquePackages.values())
+    try {
+      this.progressReporter.initialize(5);
+      this.progressReporter.updateStage(
+        require("../services/progress").ScanStage.SCANNING_FILES,
+        "Scanning workspace for all dependency files...",
+        0,
+        1
       );
 
-    const vulnerabilityMap = await this.osvService.checkMultipleVulnerabilities(
-      Array.from(uniquePackages.values())
-    );
+      const allFiles = await this.parseAllDependencyFiles();
+      let totalDependencies = 0;
+      let vulnerablePackages = 0;
+      let outdatedPackages = 0;
+      let unknownLicensePackages = 0;
+      const ecosystemBreakdown: Record<string, number> = {};
+      const vulnerabilityBreakdown = {
+        low: 0,
+        medium: 0,
+        high: 0,
+        critical: 0,
+        unknown: 0,
+      };
 
-    const filesWithMetadata = allFiles.map((fileData) => {
-      const dependenciesWithMetadata = fileData.dependencies.map((dep) => {
-        const vulnerabilities = vulnerabilityMap.get(dep.name) || [];
-        const metadata = metadataMap.get(dep.name);
+      const uniquePackages = new Map<
+        string,
+        { name: string; version: string; ecosystem: string }
+      >();
+      const allDependencies: {
+        file: import("../types").DependencyFile;
+        dependency: import("../types").PackageDependency;
+      }[] = [];
 
-        if (vulnerabilities.length > 0) {
-          vulnerablePackages++;
+      this.progressReporter.updateStage(
+        require("../services/progress").ScanStage.PARSING_DEPENDENCIES,
+        `Processing dependencies from ${allFiles.length} files...`,
+        0,
+        allFiles.length
+      );
 
-          vulnerabilities.forEach((vuln) => {
-            vulnerabilityBreakdown[
-              vuln.severity.toLowerCase() as keyof typeof vulnerabilityBreakdown
-            ]++;
+      for (const fileData of allFiles) {
+        for (const dep of fileData.dependencies) {
+          const key = `${dep.ecosystem}:${dep.name}`;
+          if (!uniquePackages.has(key)) {
+            uniquePackages.set(key, {
+              name: dep.name,
+              version: dep.version,
+              ecosystem: dep.ecosystem,
+            });
+          }
+
+          totalDependencies++;
+          ecosystemBreakdown[dep.ecosystem] =
+            (ecosystemBreakdown[dep.ecosystem] || 0) + 1;
+
+          allDependencies.push({
+            file: fileData.file,
+            dependency: dep,
           });
         }
+      }
 
-        // Count outdated and unknown license packages
-        if (metadata) {
-          if (metadata.isOutdated) {
-            outdatedPackages++;
+      // Fetch metadata for all packages
+      const packagesArray = Array.from(uniquePackages.values());
+
+      this.progressReporter.updateStage(
+        require("../services/progress").ScanStage.FETCHING_METADATA,
+        `Fetching metadata for ${packagesArray.length} packages...`,
+        0,
+        packagesArray.length
+      );
+
+      const metadataMap =
+        await this.unifiedRegistryService.fetchMultiplePackageMetadata(
+          packagesArray,
+          (
+            current: number,
+            total: number,
+            packageName?: string,
+            ecosystem?: string
+          ) => {
+            this.progressReporter.fetchingMetadata(
+              current,
+              total,
+              packageName,
+              ecosystem
+            );
           }
-          if (metadata.hasUnknownLicense) {
-            unknownLicensePackages++;
+        );
+
+      this.progressReporter.updateStage(
+        require("../services/progress").ScanStage.CHECKING_VULNERABILITIES,
+        `Checking vulnerabilities for ${packagesArray.length} packages...`,
+        0,
+        packagesArray.length
+      );
+
+      const vulnerabilityMap =
+        await this.osvService.checkMultipleVulnerabilities(
+          packagesArray,
+          (
+            current: number,
+            total: number,
+            packageName?: string,
+            vulnCount?: number
+          ) => {
+            this.progressReporter.checkingVulnerabilities(
+              current,
+              total,
+              packageName,
+              vulnCount
+            );
           }
-        }
+        );
+
+      const filesWithMetadata = allFiles.map((fileData) => {
+        const dependenciesWithMetadata = fileData.dependencies.map((dep) => {
+          const vulnerabilities = vulnerabilityMap.get(dep.name) || [];
+          const metadata = metadataMap.get(dep.name);
+
+          if (vulnerabilities.length > 0) {
+            vulnerablePackages++;
+
+            vulnerabilities.forEach((vuln) => {
+              vulnerabilityBreakdown[
+                vuln.severity.toLowerCase() as keyof typeof vulnerabilityBreakdown
+              ]++;
+            });
+          }
+
+          // Count outdated and unknown license packages
+          if (metadata) {
+            if (metadata.isOutdated) {
+              outdatedPackages++;
+            }
+            if (metadata.hasUnknownLicense) {
+              unknownLicensePackages++;
+            }
+          }
+
+          return {
+            ...dep,
+            vulnerabilities,
+            metadata,
+          };
+        });
 
         return {
-          ...dep,
-          vulnerabilities,
-          metadata,
+          ...fileData,
+          dependencies: dependenciesWithMetadata,
         };
       });
 
-      return {
-        ...fileData,
-        dependencies: dependenciesWithMetadata,
-      };
-    });
+      // Update statistics before finalizing
+      this.progressReporter.updateStatistics({
+        filesScanned: allFiles.length,
+        dependenciesFound: totalDependencies,
+        vulnerabilitiesFound: vulnerablePackages,
+        outdatedPackages: outdatedPackages,
+      });
 
-    return {
-      totalFiles: allFiles.length,
-      totalDependencies,
-      ecosystemBreakdown,
-      vulnerablePackages,
-      outdatedPackages,
-      unknownLicensePackages,
-      vulnerabilityBreakdown,
-      files: filesWithMetadata,
-      allDependencies: allDependencies.map((item) => ({
-        file: item.file,
-        dependency: {
-          ...item.dependency,
-          vulnerabilities: vulnerabilityMap.get(item.dependency.name) || [],
-          metadata: metadataMap.get(item.dependency.name),
-        },
-      })),
-    };
+      this.progressReporter.finalizing(
+        `Processing ${totalDependencies} dependencies from ${allFiles.length} files`
+      );
+
+      this.progressReporter.complete();
+
+      return {
+        totalFiles: allFiles.length,
+        totalDependencies,
+        ecosystemBreakdown,
+        vulnerablePackages,
+        outdatedPackages,
+        unknownLicensePackages,
+        vulnerabilityBreakdown,
+        files: filesWithMetadata,
+        allDependencies: allDependencies.map((item) => ({
+          file: item.file,
+          dependency: {
+            ...item.dependency,
+            vulnerabilities: vulnerabilityMap.get(item.dependency.name) || [],
+            metadata: metadataMap.get(item.dependency.name),
+          },
+        })),
+      };
+    } catch (error) {
+      this.progressReporter.error((error as Error).message);
+      throw error;
+    }
   }
 }

@@ -11,6 +11,9 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
   private _ecosystemScanner: EcosystemScanner;
   private _lastScanResult: any = null;
   private _lastCommand: string | null = null;
+  private _isScanning: boolean = false;
+  private _currentScanType: string | null = null;
+  private _lastProgress: any = null;
 
   constructor(private readonly _extensionUri: vscode.Uri) {
     this._dependencyScanner = new DependencyScanner();
@@ -62,12 +65,30 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
     if (this._view) {
       this._view.webview.html = generateWebviewHtml();
 
-      if (this._lastScanResult && this._lastCommand) {
+      // If currently scanning, restore the loading state with last progress
+      if (this._isScanning && this._currentScanType) {
+        this._restoreScanningState();
+      } else if (this._lastScanResult && this._lastCommand) {
+        // If we have previous results, restore them
         this._restoreLastData();
       } else {
+        // Otherwise, start a new scan
         await this._scanAndDisplayDependencies();
       }
     }
+  }
+
+  private _restoreScanningState(): void {
+    if (!this._view || !this._currentScanType) {
+      return;
+    }
+
+    // Send message to webview to show loading state
+    this._view.webview.postMessage({
+      command: "restoreLoadingState",
+      scanType: this._currentScanType,
+      progress: this._lastProgress,
+    });
   }
 
   private _restoreLastData(): void {
@@ -91,6 +112,7 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
     }
 
     try {
+      // No progress needed for simple scan summary
       const summary = await this._dependencyScanner.getScanSummary();
 
       this._lastScanResult = summary;
@@ -111,9 +133,31 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
     }
 
     try {
+      // Mark as scanning
+      this._isScanning = true;
+      this._currentScanType = `ecosystem:${ecosystem}`;
+
+      // Set up progress callback
+      const progressReporter = this._ecosystemScanner.getProgressReporter();
+      progressReporter.setCallback((update) => {
+        this._lastProgress = update;
+        if (this._view) {
+          this._view.webview.postMessage({
+            command: "updateProgress",
+            progress: update,
+          });
+        }
+      });
+
       const summary = await this._ecosystemScanner.scanEcosystem(
         ecosystem as any
       );
+
+      // Clear progress callback and scanning state
+      progressReporter.clearCallback();
+      this._isScanning = false;
+      this._currentScanType = null;
+      this._lastProgress = null;
 
       this._lastScanResult = summary;
       this._lastCommand = "scanEcosystem";
@@ -123,6 +167,9 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
         data: summary,
       });
     } catch (error) {
+      this._isScanning = false;
+      this._currentScanType = null;
+      this._lastProgress = null;
       this._handleError(`Failed to scan ${ecosystem} dependencies`, error);
     }
   }
@@ -133,8 +180,30 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
     }
 
     try {
+      // Mark as scanning
+      this._isScanning = true;
+      this._currentScanType = "allEcosystems";
+
+      // Set up progress callback
+      const progressReporter = this._dependencyScanner.getProgressReporter();
+      progressReporter.setCallback((update) => {
+        this._lastProgress = update;
+        if (this._view) {
+          this._view.webview.postMessage({
+            command: "updateProgress",
+            progress: update,
+          });
+        }
+      });
+
       const summary =
         await this._dependencyScanner.getUnifiedDependencySummaryWithVulnerabilities();
+
+      // Clear progress callback and scanning state
+      progressReporter.clearCallback();
+      this._isScanning = false;
+      this._currentScanType = null;
+      this._lastProgress = null;
 
       this._lastScanResult = summary;
       this._lastCommand = "scanAllEcosystems";
@@ -144,6 +213,9 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
         data: summary,
       });
     } catch (error) {
+      this._isScanning = false;
+      this._currentScanType = null;
+      this._lastProgress = null;
       this._handleError("Failed to scan all ecosystems dependencies", error);
     }
   }

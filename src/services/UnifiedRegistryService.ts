@@ -15,7 +15,13 @@ export interface IUnifiedRegistryService {
     version?: string
   ): Promise<PackageMetadata>;
   fetchMultiplePackageMetadata(
-    packages: { name: string; ecosystem: string; version?: string }[]
+    packages: { name: string; ecosystem: string; version?: string }[],
+    onProgress?: (
+      current: number,
+      total: number,
+      packageName?: string,
+      ecosystem?: string
+    ) => void
   ): Promise<Map<string, PackageMetadata>>;
   getSupportedEcosystems(): string[];
 }
@@ -98,9 +104,17 @@ export class UnifiedRegistryService implements IUnifiedRegistryService {
   }
 
   public async fetchMultiplePackageMetadata(
-    packages: { name: string; ecosystem: string; version?: string }[]
+    packages: { name: string; ecosystem: string; version?: string }[],
+    onProgress?: (
+      current: number,
+      total: number,
+      packageName?: string,
+      ecosystem?: string
+    ) => void
   ): Promise<Map<string, PackageMetadata>> {
     const results = new Map<string, PackageMetadata>();
+    const totalPackages = packages.length;
+    let processedPackages = 0;
 
     // Group packages by ecosystem for batch processing
     const packagesByEcosystem = new Map<
@@ -138,6 +152,10 @@ export class UnifiedRegistryService implements IUnifiedRegistryService {
                 ecosystem
               )
             );
+            processedPackages++;
+            if (onProgress) {
+              onProgress(processedPackages, totalPackages, pkg.name, ecosystem);
+            }
           }
           return;
         }
@@ -148,6 +166,10 @@ export class UnifiedRegistryService implements IUnifiedRegistryService {
           );
           for (const [name, metadata] of ecosystemResults) {
             results.set(name, metadata);
+            processedPackages++;
+            if (onProgress) {
+              onProgress(processedPackages, totalPackages, name, ecosystem);
+            }
           }
         } catch (error) {
           console.error(
@@ -164,6 +186,10 @@ export class UnifiedRegistryService implements IUnifiedRegistryService {
                 ecosystem
               )
             );
+            processedPackages++;
+            if (onProgress) {
+              onProgress(processedPackages, totalPackages, pkg.name, ecosystem);
+            }
           }
         }
       }
