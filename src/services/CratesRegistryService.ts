@@ -169,7 +169,10 @@ export class CratesRegistryService
           );
           results.set(pkg.name, metadata);
         } catch (error) {
-          console.error(`Failed to fetch metadata for ${pkg.name}:`, error);
+          console.error(
+            `[Crates] Failed to fetch metadata for ${pkg.name}:`,
+            error
+          );
           // Add default metadata for failed packages
           const defaultMetadata = this.createDefaultMetadata(
             pkg.name,
@@ -232,7 +235,7 @@ export class CratesRegistryService
       version: targetVersion,
       license: license,
       lastUpdated: lastUpdated,
-      size: versionData?.crate_size || 0,
+      size: versionData?.crate_size || -1,
       description: crate.description || "",
       author: author,
       homepage: crate.homepage || "",
