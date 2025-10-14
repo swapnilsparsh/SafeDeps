@@ -113,7 +113,9 @@ export class PackagistRegistryService
       return metadata;
     } catch (error) {
       console.error(
-        `Error fetching Packagist metadata for ${packageName}:`,
+        `[Packagist] Error fetching metadata for ${packageName}@${
+          version || "latest"
+        }:`,
         error
       );
       const defaultMetadata = this.createDefaultMetadata(
@@ -165,6 +167,56 @@ export class PackagistRegistryService
               !v.includes("master") &&
               !v.includes("trunk")
           ) || versions[0];
+      } else {
+        // Check if the exact version exists
+        if (!packageData.versions[targetVersion]) {
+          // Try common variations
+          const variations = [
+            targetVersion,
+            `v${targetVersion}`,
+            targetVersion.replace(/^v/, ""),
+            `${targetVersion}.0`, // Try adding .0 for versions like "12.0" -> "12.0.0"
+            `${targetVersion}.0.0`, // Try adding .0.0 for versions like "12" -> "12.0.0"
+          ];
+
+          let foundVersion = null;
+          for (const variant of variations) {
+            if (packageData.versions[variant]) {
+              foundVersion = variant;
+              break;
+            }
+          }
+
+          if (!foundVersion) {
+            // Try to find a matching version using semver-like matching
+            // For "12.0", find "12.0.x", for "7.5" find "7.5.x"
+            const matchingVersion = versions.find((v) => {
+              const cleanV = v.replace(/^v/, "");
+              return cleanV.startsWith(targetVersion + ".");
+            });
+
+            if (matchingVersion) {
+              foundVersion = matchingVersion;
+            }
+          }
+
+          if (foundVersion) {
+            targetVersion = foundVersion;
+          } else {
+            // Fall back to latest stable
+            const latestStable =
+              versions.find(
+                (v) =>
+                  !v.includes("dev") &&
+                  !v.includes("master") &&
+                  !v.includes("trunk")
+              ) || versions[0];
+            console.warn(
+              `[Packagist] Version ${targetVersion} not found for ${packageName}, falling back to ${latestStable}`
+            );
+            targetVersion = latestStable;
+          }
+        }
       }
 
       const versionData = packageData.versions[targetVersion];
@@ -194,6 +246,14 @@ export class PackagistRegistryService
         license === "Unknown" ||
         license.toLowerCase().includes("unknown");
 
+      // Debug logging for license extraction
+      if (hasUnknownLicense) {
+        console.warn(
+          `[Packagist] Package ${packageName}@${targetVersion} has unknown license. Raw license data:`,
+          versionData.license
+        );
+      }
+
       // Get author information
       const authors = versionData.authors || [];
       const author =
@@ -207,12 +267,27 @@ export class PackagistRegistryService
       const homepage =
         versionData.homepage || `https://packagist.org/packages/${packageName}`;
 
+      // Get package size from dist URL
+      // Use -1 to indicate size is unavailable (will be hidden in UI)
+      let size = -1;
+      if (versionData.dist?.url) {
+        try {
+          size = await this.fetchPackageSize(versionData.dist.url);
+        } catch (error) {
+          console.warn(
+            `Could not fetch size for ${packageName}@${targetVersion}:`,
+            error
+          );
+          // Size remains -1 if fetch fails
+        }
+      }
+
       return {
         name: packageData.name || packageName,
         version: targetVersion,
         license: license,
         lastUpdated: new Date(versionData.time),
-        size: 0, // Size not provided by Packagist API
+        size: size,
         description: versionData.description || packageData.description || "",
         author: author,
         homepage: homepage,
@@ -221,7 +296,43 @@ export class PackagistRegistryService
         hasUnknownLicense: hasUnknownLicense,
       };
     } catch (error) {
+      console.error(`Error in fetchFromPackagist for ${packageName}:`, error);
       throw new Error(`Failed to fetch Packagist metadata: ${error}`);
+    }
+  }
+
+  /**
+   * Attempts to fetch the package size from the distribution URL using HEAD request
+   * Note: GitHub zipball URLs don't provide Content-Length headers
+   * @param distUrl The URL to the package distribution (zipball/tarball)
+   * @returns Size in bytes, or -1 if unable to fetch (indicating unavailable)
+   */
+  private async fetchPackageSize(distUrl: string): Promise<number> {
+    try {
+      const response = await fetch(distUrl, {
+        method: "HEAD",
+        headers: this.getDefaultHeaders(),
+        redirect: "follow",
+      });
+
+      if (response.ok) {
+        const contentLength = response.headers.get("Content-Length");
+        if (contentLength && contentLength !== "0") {
+          const size = parseInt(contentLength, 10);
+          if (size > 0) {
+            return size;
+          }
+        }
+      }
+
+      // GitHub URLs don't provide Content-Length, return -1 to indicate unavailable
+      return -1;
+    } catch (error) {
+      console.warn(
+        `[Packagist] Failed to fetch package size from ${distUrl}:`,
+        error
+      );
+      return -1;
     }
   }
 

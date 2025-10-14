@@ -92,7 +92,9 @@ export class RubyGemsRegistryService
       return metadata;
     } catch (error) {
       console.error(
-        `Error fetching RubyGems metadata for ${packageName}:`,
+        `[RubyGems] Error fetching metadata for ${packageName}@${
+          version || "latest"
+        }:`,
         error
       );
       const defaultMetadata = this.createDefaultMetadata(
@@ -109,6 +111,10 @@ export class RubyGemsRegistryService
     version?: string
   ): Promise<PackageMetadata> {
     try {
+      console.log(
+        `[RubyGems] Fetching metadata for ${packageName}@${version || "latest"}`
+      );
+
       let gemUrl: string;
       let versionsUrl: string;
 
@@ -179,6 +185,14 @@ export class RubyGemsRegistryService
         license === "Unknown" ||
         license.toLowerCase().includes("unknown");
 
+      // Debug logging for license extraction
+      if (hasUnknownLicense) {
+        console.warn(
+          `[RubyGems] Package ${packageName}@${targetVersion} has unknown license. Raw license data:`,
+          gemData.licenses
+        );
+      }
+
       // Get repository URL
       const repository =
         gemData.source_code_uri || gemData.metadata?.source_code_uri || "";
@@ -189,12 +203,30 @@ export class RubyGemsRegistryService
         gemData.metadata?.homepage_uri ||
         `https://rubygems.org/gems/${packageName}`;
 
+      // Get package size from gem_uri
+      let size = -1;
+      if (gemData.gem_uri) {
+        try {
+          size = await this.fetchGemSize(gemData.gem_uri);
+        } catch (error) {
+          console.warn(
+            `[RubyGems] Could not fetch size for ${packageName}@${targetVersion}:`,
+            error
+          );
+          // Size remains -1 if fetch fails
+        }
+      }
+
+      console.log(
+        `[RubyGems] Fetched ${packageName}@${targetVersion}, license: ${license}, size: ${size} bytes`
+      );
+
       return {
         name: gemData.name || packageName,
         version: targetVersion,
         license: license,
         lastUpdated: lastUpdated,
-        size: 0, // Size not provided by RubyGems API
+        size: size,
         description: gemData.info || "",
         author: gemData.authors || "",
         homepage: homepage,
@@ -203,7 +235,43 @@ export class RubyGemsRegistryService
         hasUnknownLicense: hasUnknownLicense,
       };
     } catch (error) {
+      console.error(
+        `[RubyGems] Error in fetchFromRubyGems for ${packageName}:`,
+        error
+      );
       throw new Error(`Failed to fetch RubyGems metadata: ${error}`);
+    }
+  }
+
+  /**
+   * Fetches the gem size from the gem URI using HEAD request
+   * @param gemUri The URL to the .gem file
+   * @returns Size in bytes, or -1 if unable to fetch
+   */
+  private async fetchGemSize(gemUri: string): Promise<number> {
+    try {
+      const response = await fetch(gemUri, {
+        method: "HEAD",
+        headers: this.getDefaultHeaders(),
+      });
+
+      if (response.ok) {
+        const contentLength = response.headers.get("Content-Length");
+        if (contentLength && contentLength !== "0") {
+          const size = parseInt(contentLength, 10);
+          if (size > 0) {
+            return size;
+          }
+        }
+      }
+
+      return -1;
+    } catch (error) {
+      console.warn(
+        `[RubyGems] Failed to fetch gem size from ${gemUri}:`,
+        error
+      );
+      return -1;
     }
   }
 

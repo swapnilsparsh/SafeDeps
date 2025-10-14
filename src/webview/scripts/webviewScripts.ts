@@ -739,12 +739,17 @@ export const getWebviewJavaScript = (): string => {
             const formattedSize = formatBytes(metadata.size);
             const lastUpdated = formatDate(new Date(metadata.lastUpdated));
 
+            // Only show size if it's available (not -1)
+            const sizeHtml = formattedSize ? \`
+                <div class="metadata-item">
+                    <span class="size-indicator \${sizeClass}"></span>
+                    <span>\${formattedSize}</span>
+                </div>
+            \` : '';
+
             return \`
                 <div class="package-metadata">
-                    <div class="metadata-item">
-                        <span class="size-indicator \${sizeClass}"></span>
-                        <span>\${formattedSize}</span>
-                    </div>
+                    \${sizeHtml}
                     <div class="metadata-item">
                         📄 \${metadata.license}
                     </div>
@@ -757,6 +762,7 @@ export const getWebviewJavaScript = (): string => {
         }
 
         function getSizeClass(size) {
+            if (size < 0) return ''; // Size unavailable, no class needed
             if (size < 50000) return 'size-small';
             if (size < 500000) return 'size-medium';
             if (size < 5000000) return 'size-large';
@@ -764,6 +770,7 @@ export const getWebviewJavaScript = (): string => {
         }
 
         function formatBytes(bytes) {
+            if (bytes < 0) return null; // Size unavailable
             if (bytes === 0) return '0 B';
             const k = 1024;
             const sizes = ['B', 'KB', 'MB', 'GB'];

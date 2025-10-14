@@ -72,7 +72,7 @@ export class GoRegistryService
       this.cache.set(cacheKey, metadata);
       return metadata;
     } catch (error) {
-      console.error(`Error fetching Go metadata for ${packageName}:`, error);
+      console.error(`[Go] Error fetching metadata for ${packageName}:`, error);
       const defaultMetadata = this.createDefaultMetadata(
         packageName,
         version || "latest"
@@ -189,11 +189,11 @@ export class GoRegistryService
 
       if (zipResponse.ok) {
         const contentLength = zipResponse.headers.get("content-length");
-        return contentLength ? parseInt(contentLength, 10) : 0;
+        return contentLength ? parseInt(contentLength, 10) : -1;
       }
-      return 0;
+      return -1;
     } catch {
-      return 0;
+      return -1;
     }
   }
 

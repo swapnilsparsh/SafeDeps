@@ -33,6 +33,11 @@ export class NpmRegistryService
 
     try {
       const url = `${this.NPM_REGISTRY_URL}/${encodeURIComponent(packageName)}`;
+      console.log(
+        `[npm] Fetching metadata for ${packageName}@${
+          version || "latest"
+        } from ${url}`
+      );
       const response = await fetch(url);
 
       if (!response.ok) {
@@ -50,35 +55,68 @@ export class NpmRegistryService
         !version.startsWith(">=")
       ) {
         versionData = data.versions[version];
+        console.log(
+          `[npm] Looking for exact version ${version}:`,
+          versionData ? "found" : "not found"
+        );
       } else {
         const latestVersion = data["dist-tags"]?.latest;
         versionData = data.versions[latestVersion];
+        console.log(
+          `[npm] Using latest version ${latestVersion}:`,
+          versionData ? "found" : "not found"
+        );
       }
 
       if (!versionData) {
+        console.warn(
+          `[npm] Version ${version || "latest"} not found, available versions:`,
+          Object.keys(data.versions).slice(0, 5)
+        );
         throw new Error(`Version ${version || "latest"} not found`);
       }
 
       const lastUpdated = data.time[versionData.version] || data.time.modified;
 
+      // Extract license with fallback to root level
+      let license = this.extractLicense(versionData.license);
+      if (license === "Unknown" && data.license) {
+        console.log(
+          `[npm] Version license unknown, using root license:`,
+          data.license
+        );
+        license = this.extractLicense(data.license);
+      }
+
+      const size = this.extractSize(versionData.dist);
+
+      console.log(
+        `[npm] Extracted metadata for ${packageName}@${versionData.version}:`,
+        {
+          license,
+          size,
+          hasUnpackedSize: !!versionData.dist?.unpackedSize,
+        }
+      );
+
       const metadata: PackageMetadata = {
         name: packageName,
         version: versionData.version,
-        license: this.extractLicense(versionData.license),
+        license,
         lastUpdated: new Date(lastUpdated),
-        size: this.extractSize(versionData.dist),
+        size,
         description: versionData.description || "",
         author: this.extractAuthor(versionData.author),
         homepage: versionData.homepage || "",
         repository: this.extractRepository(versionData.repository),
         isOutdated: this.isPackageOutdated(new Date(lastUpdated)),
-        hasUnknownLicense: this.isLicenseUnknown(versionData.license),
+        hasUnknownLicense: this.isLicenseUnknown(license),
       };
 
       this.cache.set(cacheKey, metadata);
       return metadata;
     } catch (error) {
-      console.error(`Error fetching metadata for ${packageName}:`, error);
+      console.error(`[npm] Error fetching metadata for ${packageName}:`, error);
 
       const defaultMetadata = this.createDefaultMetadata(
         packageName,
@@ -118,10 +156,10 @@ export class NpmRegistryService
 
   private extractSize(dist: any): number {
     if (!dist) {
-      return 0;
+      return -1; // Size unavailable
     }
 
-    return dist.unpackedSize || dist.size || 0;
+    return dist.unpackedSize || dist.size || -1;
   }
 
   private extractAuthor(author: any): string {
@@ -169,12 +207,14 @@ export class NpmRegistryService
       return true;
     }
 
-    const licenseString = this.extractLicense(license).toLowerCase();
+    const licenseString =
+      typeof license === "string" ? license : this.extractLicense(license);
+    const normalized = licenseString.toLowerCase();
     return (
-      licenseString === "unknown" ||
-      licenseString === "" ||
-      licenseString === "unlicensed" ||
-      licenseString === "none"
+      normalized === "unknown" ||
+      normalized === "" ||
+      normalized === "unlicensed" ||
+      normalized === "none"
     );
   }
 }

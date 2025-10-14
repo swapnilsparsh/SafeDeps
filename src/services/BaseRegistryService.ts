@@ -47,7 +47,7 @@ export abstract class BaseRegistryService implements IBaseRegistryService {
       version,
       license: "Unknown",
       lastUpdated: new Date(),
-      size: 0,
+      size: -1, // Size unavailable
       description: "",
       author: "",
       homepage: "",
