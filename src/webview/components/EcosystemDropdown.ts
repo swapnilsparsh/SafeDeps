@@ -416,6 +416,10 @@ export const getEcosystemDropdownButtonScript = (): string => {
 
       setLoadingState(true);
       lastCommand = 'scanEcosystem';
+      currentScanType = 'ecosystem:' + ecosystem;
+      lastProgress = null;
+      loadingStateTimestamp = Date.now(); // Set timestamp
+      saveWebviewState(); // Save loading state
       document.getElementById('content').innerHTML = \`
         <div class="loading">
           <div class="loading-spinner"></div>

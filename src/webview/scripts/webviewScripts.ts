@@ -9,12 +9,21 @@ export const getWebviewJavaScript = (): string => {
         let lastData = null;
         let lastCommand = null;
         let currentFilter = 'all'; // 'all', 'vulnerable', 'critical', 'high', 'medium', 'low'
+        let currentScanType = null; // Tracks the current scan type during loading
+        let lastProgress = null; // Tracks the last progress update
+        let loadingStateTimestamp = null; // Timestamp when loading state was set
+
+        const LOADING_STATE_TIMEOUT = 60000; // 60 seconds - consider loading state stale after this
 
         function scanDependencies() {
             if (isLoading) return;
 
             setLoadingState(true);
             lastCommand = 'scanDependencies';
+            currentScanType = 'scanDependencies';
+            lastProgress = null;
+            loadingStateTimestamp = Date.now(); // Set timestamp
+            saveWebviewState(); // Save loading state
             document.getElementById('content').innerHTML = \`
                 <div class="loading">
                     <div class="loading-spinner"></div>
@@ -29,6 +38,10 @@ export const getWebviewJavaScript = (): string => {
 
             setLoadingState(true);
             lastCommand = 'scanAllEcosystems';
+            currentScanType = 'allEcosystems';
+            lastProgress = null;
+            loadingStateTimestamp = Date.now(); // Set timestamp
+            saveWebviewState(); // Save loading state
             document.getElementById('content').innerHTML = \`
                 <div class="loading">
                     <div class="loading-spinner"></div>
@@ -83,6 +96,10 @@ export const getWebviewJavaScript = (): string => {
         }
 
         function updateProgress(progress) {
+            // Save progress state
+            lastProgress = progress;
+            saveWebviewState();
+
             const messageEl = document.getElementById('progress-message');
             const barEl = document.getElementById('progress-bar');
             const detailsEl = document.getElementById('progress-details');
@@ -433,6 +450,10 @@ export const getWebviewJavaScript = (): string => {
             }
             lastData = summary;
             lastCommand = 'scanDependencies';
+            currentScanType = null; // Clear scan type
+            lastProgress = null; // Clear progress
+            loadingStateTimestamp = null; // Clear timestamp
+            saveWebviewState();
 
             const content = document.getElementById('content');
 
@@ -540,6 +561,10 @@ export const getWebviewJavaScript = (): string => {
             }
             lastData = summary;
             lastCommand = 'scanEcosystem';
+            currentScanType = null; // Clear scan type
+            lastProgress = null; // Clear progress
+            loadingStateTimestamp = null; // Clear timestamp
+            saveWebviewState();
 
             const content = document.getElementById('content');
 
@@ -812,6 +837,10 @@ export const getWebviewJavaScript = (): string => {
             }
             lastData = summary;
             lastCommand = 'scanAllEcosystems';
+            currentScanType = null; // Clear scan type
+            lastProgress = null; // Clear progress
+            loadingStateTimestamp = null; // Clear timestamp
+            saveWebviewState();
 
             const content = document.getElementById('content');
 
@@ -1059,9 +1088,20 @@ export const getWebviewJavaScript = (): string => {
         // Request scan results when the webview loads
         // Initialize filter state and add keyboard shortcuts
         window.addEventListener('DOMContentLoaded', () => {
-            if (lastData && lastCommand) {
+            // First, restore state from VS Code storage
+            restoreWebviewState();
+
+            // If we have a loading state, restore it but also request backend state
+            // in case the scan completed while we were away
+            if (isLoading && currentScanType) {
+                restoreLoadingState(currentScanType, lastProgress);
+                // Request backend to send results if available (prevents stuck loading state)
+                vscode.postMessage({ command: 'restoreData' });
+            } else if (lastData && lastCommand) {
+                // Otherwise restore completed scan data
                 restoreLastData();
             } else {
+                // Only scan if we don't have any saved state
                 scanDependencies();
             }
 
@@ -1108,15 +1148,66 @@ export const getWebviewJavaScript = (): string => {
             }
         }
 
+        // Persist webview data state in VS Code state
+        function saveWebviewState() {
+            const state = vscode.getState() || {};
+            state.lastData = lastData;
+            state.lastCommand = lastCommand;
+            state.currentFilter = currentFilter;
+            state.isLoading = isLoading;
+            state.currentScanType = currentScanType;
+            state.lastProgress = lastProgress;
+            state.loadingStateTimestamp = isLoading ? Date.now() : null; // Save timestamp when loading
+            vscode.setState(state);
+        }
+
+        function restoreWebviewState() {
+            const state = vscode.getState();
+            if (state) {
+                if (state.lastData) {
+                    lastData = state.lastData;
+                }
+                if (state.lastCommand) {
+                    lastCommand = state.lastCommand;
+                }
+                if (state.currentFilter) {
+                    currentFilter = state.currentFilter;
+                }
+
+                // Check if loading state is stale
+                if (state.isLoading !== undefined) {
+                    const timestamp = state.loadingStateTimestamp || 0;
+                    const now = Date.now();
+                    const isStale = (now - timestamp) > LOADING_STATE_TIMEOUT;
+
+                    if (isStale) {
+                        // Loading state is stale, clear it
+                        console.log('[SafeDeps] Loading state is stale, clearing...');
+                        isLoading = false;
+                        currentScanType = null;
+                        lastProgress = null;
+                        loadingStateTimestamp = null;
+                    } else {
+                        // Loading state is fresh, restore it
+                        isLoading = state.isLoading;
+                        loadingStateTimestamp = timestamp;
+                        if (state.currentScanType) {
+                            currentScanType = state.currentScanType;
+                        }
+                        if (state.lastProgress) {
+                            lastProgress = state.lastProgress;
+                        }
+                    }
+                }
+            }
+        }
+
         // Override setFilter to include state persistence
         const originalSetFilter = setFilter;
         setFilter = function(filter) {
             originalSetFilter(filter);
-            saveFilterState();
+            saveWebviewState(); // Save entire state including filter
         };
-
-        // Restore filter state on load
-        restoreFilterState();
 
         ${getEcosystemDropdownButtonScript()}
         ${getFilterUtilityScript()}
