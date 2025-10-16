@@ -237,19 +237,9 @@ export const getWebviewJavaScript = (): string => {
                 filterButton.classList.add('active');
             }
 
-            // Re-render based on current command type
-            if (lastData && lastCommand) {
-                switch (lastCommand) {
-                    case 'scanDependencies':
-                        renderDependencies(lastData, false);
-                        break;
-                    case 'scanEcosystem':
-                        renderEcosystemDependencies(lastData, false);
-                        break;
-                    case 'scanAllEcosystems':
-                        renderAllEcosystemsDependencies(lastData, false);
-                        break;
-                }
+            // Just reapply the filter without full re-render
+            if (typeof applySearchFilter === 'function') {
+                applySearchFilter();
             }
         }
 
@@ -263,6 +253,11 @@ export const getWebviewJavaScript = (): string => {
         }
 
         function shouldShowDependency(dep) {
+            // First check if it matches the search query
+            if (typeof matchesSearchQuery === 'function' && !matchesSearchQuery(dep)) {
+                return false;
+            }
+
             if (currentFilter === 'all') return true;
 
             if (currentFilter === 'vulnerable') {
@@ -532,6 +527,11 @@ export const getWebviewJavaScript = (): string => {
 
             // Update available ecosystems for dropdown
             updateAvailableEcosystemsFromSummary(summary);
+
+            // Reapply search filter after rendering
+            if (typeof applySearchFilter === 'function') {
+                applySearchFilter();
+            }
         }
 
         function updateAvailableEcosystemsFromSummary(summary) {
@@ -607,17 +607,7 @@ export const getWebviewJavaScript = (): string => {
                         \${hasVulnerabilities ? (hasOutdated || hasUnknownLicense ? '<br>' : '') + '🚨 ' + summary.vulnerablePackages + ' vulnerable package' + (summary.vulnerablePackages !== 1 ? 's' : '') : ''}
                     </div>
                 </div>
-                <div class="filter-bar">
-                    <span style="font-size: 11px; font-weight: 500;">Filter:</span>
-                    <button class="filter-button \${currentFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="setFilter('all')">All</button>
-                    \${hasVulnerabilities ? \`<button class="filter-button \${currentFilter === 'vulnerable' ? 'active' : ''}" data-filter="vulnerable" onclick="setFilter('vulnerable')">Vulnerable Only</button>\` : ''}
-                    \${hasOutdated ? \`<button class="filter-button \${currentFilter === 'outdated' ? 'active' : ''}" data-filter="outdated" onclick="setFilter('outdated')">Outdated Only</button>\` : ''}
-                    \${hasUnknownLicense ? \`<button class="filter-button \${currentFilter === 'unknown-license' ? 'active' : ''}" data-filter="unknown-license" onclick="setFilter('unknown-license')">Unknown License</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.critical > 0 ? \`<button class="filter-button \${currentFilter === 'critical' ? 'active' : ''}" data-filter="critical" onclick="setFilter('critical')">Critical (\${summary.vulnerabilityBreakdown.critical})</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.high > 0 ? \`<button class="filter-button \${currentFilter === 'high' ? 'active' : ''}" data-filter="high" onclick="setFilter('high')">High (\${summary.vulnerabilityBreakdown.high})</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.medium > 0 ? \`<button class="filter-button \${currentFilter === 'medium' ? 'active' : ''}" data-filter="medium" onclick="setFilter('medium')">Medium (\${summary.vulnerabilityBreakdown.medium})</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.low > 0 ? \`<button class="filter-button \${currentFilter === 'low' ? 'active' : ''}" data-filter="low" onclick="setFilter('low')">Low (\${summary.vulnerabilityBreakdown.low})</button>\` : ''}
-                </div>
+                \${typeof renderFilterBar === 'function' ? renderFilterBar(summary, hasVulnerabilities, hasOutdated, hasUnknownLicense) : ''}
                 <div class="action-bar">
                     <button class="action-button" onclick="expandAllFiles()">📂 Expand All</button>
                     <button class="action-button" onclick="collapseAllFiles()">📁 Collapse All</button>
@@ -714,10 +704,12 @@ export const getWebviewJavaScript = (): string => {
 
                                 if (dep.vulnerabilities && dep.vulnerabilities.length > 0) {
                                     vulnerabilityInfo = '<div class="vulnerability-details">';
+                                    const highlight = typeof highlightSearchTerm === 'function' ? highlightSearchTerm : (text) => text;
                                     dep.vulnerabilities.forEach(vuln => {
+                                        const cveText = vuln.cveIds.length > 0 ? '(' + vuln.cveIds.join(', ') + ')' : '';
                                         vulnerabilityInfo += \`
                                             <div class="vulnerability-item">
-                                                <div class="vulnerability-cve">\${vuln.id} \${vuln.cveIds.length > 0 ? '(' + vuln.cveIds.join(', ') + ')' : ''}</div>
+                                                <div class="vulnerability-cve">\${highlight(vuln.id)} \${highlight(cveText)}</div>
                                                 <div class="vulnerability-summary">\${vuln.summary}</div>
                                             </div>
                                         \`;
@@ -732,11 +724,11 @@ export const getWebviewJavaScript = (): string => {
                                     <div style="flex: 1;">
                                         <div class="file-name">
                                             <span class="package-name-clickable" onclick="openPackageRegistry('\${dep.name.replace(/'/g, "\\'")}', '\${summary.ecosystem}')" title="Open in \${summary.ecosystem} registry">
-                                                \${dep.name}
+                                                \${typeof highlightSearchTerm === 'function' ? highlightSearchTerm(dep.name) : dep.name}
                                             </span>
                                             \${alertBadges}
                                         </div>
-                                        <div class="file-path">\${dep.version}</div>
+                                        <div class="file-path">\${typeof highlightSearchTerm === 'function' ? highlightSearchTerm(dep.version) : dep.version}</div>
                                         \${metadata ? renderPackageMetadata(metadata) : '<div class="package-metadata">Metadata unavailable for \${summary.ecosystem}</div>'}
                                         \${vulnerabilityInfo}
                                     </div>
@@ -753,6 +745,11 @@ export const getWebviewJavaScript = (): string => {
 
             html += '</div>';
             content.innerHTML = html;
+
+            // Reapply search filter after rendering
+            if (typeof applySearchFilter === 'function') {
+                applySearchFilter();
+            }
         }
 
         function renderPackageMetadata(metadata) {
@@ -763,6 +760,9 @@ export const getWebviewJavaScript = (): string => {
             const sizeClass = getSizeClass(metadata.size);
             const formattedSize = formatBytes(metadata.size);
             const lastUpdated = formatDate(new Date(metadata.lastUpdated));
+
+            // Highlight function
+            const highlight = typeof highlightSearchTerm === 'function' ? highlightSearchTerm : (text) => text;
 
             // Only show size if it's available (not -1)
             const sizeHtml = formattedSize ? \`
@@ -776,12 +776,12 @@ export const getWebviewJavaScript = (): string => {
                 <div class="package-metadata">
                     \${sizeHtml}
                     <div class="metadata-item">
-                        📄 \${metadata.license}
+                        📄 \${highlight(metadata.license)}
                     </div>
                     <div class="metadata-item">
                         📅 \${lastUpdated}
                     </div>
-                    \${metadata.author ? \`<div class="metadata-item">👤 \${metadata.author}</div>\` : ''}
+                    \${metadata.author ? \`<div class="metadata-item">👤 \${highlight(metadata.author)}</div>\` : ''}
                 </div>
             \`;
         }
@@ -885,17 +885,7 @@ export const getWebviewJavaScript = (): string => {
                         \${hasVulnerabilities ? (hasOutdated || hasUnknownLicense ? '<br>' : '') + '🚨 ' + summary.vulnerablePackages + ' vulnerable package' + (summary.vulnerablePackages !== 1 ? 's' : '') : ''}
                     </div>
                 </div>
-                <div class="filter-bar">
-                    <span style="font-size: 11px; font-weight: 500;">Filter:</span>
-                    <button class="filter-button \${currentFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="setFilter('all')">All</button>
-                    \${hasVulnerabilities ? \`<button class="filter-button \${currentFilter === 'vulnerable' ? 'active' : ''}" data-filter="vulnerable" onclick="setFilter('vulnerable')">Vulnerable Only</button>\` : ''}
-                    \${hasOutdated ? \`<button class="filter-button \${currentFilter === 'outdated' ? 'active' : ''}" data-filter="outdated" onclick="setFilter('outdated')">Outdated Only</button>\` : ''}
-                    \${hasUnknownLicense ? \`<button class="filter-button \${currentFilter === 'unknown-license' ? 'active' : ''}" data-filter="unknown-license" onclick="setFilter('unknown-license')">Unknown License</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.critical > 0 ? \`<button class="filter-button \${currentFilter === 'critical' ? 'active' : ''}" data-filter="critical" onclick="setFilter('critical')">Critical (\${summary.vulnerabilityBreakdown.critical})</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.high > 0 ? \`<button class="filter-button \${currentFilter === 'high' ? 'active' : ''}" data-filter="high" onclick="setFilter('high')">High (\${summary.vulnerabilityBreakdown.high})</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.medium > 0 ? \`<button class="filter-button \${currentFilter === 'medium' ? 'active' : ''}" data-filter="medium" onclick="setFilter('medium')">Medium (\${summary.vulnerabilityBreakdown.medium})</button>\` : ''}
-                    \${summary.vulnerabilityBreakdown.low > 0 ? \`<button class="filter-button \${currentFilter === 'low' ? 'active' : ''}" data-filter="low" onclick="setFilter('low')">Low (\${summary.vulnerabilityBreakdown.low})</button>\` : ''}
-                </div>
+                \${typeof renderFilterBar === 'function' ? renderFilterBar(summary, hasVulnerabilities, hasOutdated, hasUnknownLicense) : ''}
                 <div class="action-bar">
                     <button class="action-button" onclick="expandAllFiles()">📂 Expand All</button>
                     <button class="action-button" onclick="collapseAllFiles()">📁 Collapse All</button>
@@ -1054,6 +1044,11 @@ export const getWebviewJavaScript = (): string => {
 
             html += '</div>';
             content.innerHTML = html;
+
+            // Reapply search filter after rendering
+            if (typeof applySearchFilter === 'function') {
+                applySearchFilter();
+            }
         }
 
         // Handle messages from the extension
@@ -1154,6 +1149,7 @@ export const getWebviewJavaScript = (): string => {
             state.lastData = lastData;
             state.lastCommand = lastCommand;
             state.currentFilter = currentFilter;
+            state.searchQuery = typeof filterState !== 'undefined' ? filterState.searchQuery : '';
             state.isLoading = isLoading;
             state.currentScanType = currentScanType;
             state.lastProgress = lastProgress;
@@ -1172,6 +1168,9 @@ export const getWebviewJavaScript = (): string => {
                 }
                 if (state.currentFilter) {
                     currentFilter = state.currentFilter;
+                }
+                if (state.searchQuery && typeof filterState !== 'undefined') {
+                    filterState.searchQuery = state.searchQuery;
                 }
 
                 // Check if loading state is stale
