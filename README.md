@@ -41,6 +41,11 @@ SafeDeps is a comprehensive VS Code extension that helps developers maintain sec
 - **Interactive WebView** - Modern, responsive interface with VS Code theming
 - **Command Palette** - Quick actions and ecosystem-specific scanning
 - **File Navigation** - Click to open dependency files directly
+- **Search & Filter** - Quickly find specific packages by name, version, CVE, or license
+  - Real-time search
+  - Keyboard shortcut support (Ctrl/Cmd+F)
+  - Search across package names, versions, authors, licenses, and CVE IDs
+  - Combine search with vulnerability filters for precise results
 
 ## 🚀 Getting Started
 
@@ -96,6 +101,33 @@ Choose a specific ecosystem (npm, Python, Go, etc.) for targeted analysis.
 
 - Unknown licenses flagged for review
 - License information for compliance tracking
+
+### 🔍 Search & Filter
+
+#### Quick Search
+
+Use the search box in the results view to find specific packages:
+
+- **Press `Ctrl/Cmd+F`** to focus the search input
+- Type package name, version, or CVE ID
+- See real-time results with highlighted matches
+- **Press `Esc`** to clear search
+
+#### Search Capabilities
+
+- **Package Names** - Find packages by name (e.g., "react", "lodash")
+- **Versions** - Search by version numbers (e.g., "1.2.3")
+- **Authors** - Find packages by author name
+- **Licenses** - Search by license type (e.g., "MIT", "Apache")
+- **CVE IDs** - Search for specific vulnerabilities (e.g., "CVE-2023-12345")
+
+#### Combining Filters
+
+Apply multiple filters simultaneously:
+
+1. Select a vulnerability filter (e.g., "Critical")
+2. Use search to find specific package names
+3. Results show only packages matching both criteria
 
 ## ⚙️ Configuration
 

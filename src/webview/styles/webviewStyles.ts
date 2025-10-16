@@ -346,13 +346,12 @@ export const getWebviewStyles = (): string => {
         }
         .filter-bar {
             margin-bottom: 16px;
-            padding: 8px;
+            padding: 12px;
             background-color: var(--vscode-textBlockQuote-background);
             border-radius: 4px;
             display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
+            flex-direction: column;
+            gap: 12px;
             border: 1px solid var(--vscode-panel-border);
         }
         .filter-button {
