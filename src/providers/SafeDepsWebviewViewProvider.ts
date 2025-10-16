@@ -71,10 +71,9 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
       } else if (this._lastScanResult && this._lastCommand) {
         // If we have previous results, restore them
         this._restoreLastData();
-      } else {
-        // Otherwise, start a new scan
-        await this._scanAndDisplayDependencies();
       }
+      // If neither scanning nor previous results exist, the webview's DOMContentLoaded
+      // event will check its persisted state or trigger a new scan
     }
   }
 
