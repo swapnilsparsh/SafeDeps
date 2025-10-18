@@ -51,7 +51,7 @@ SafeDeps is a comprehensive VS Code extension that helps developers maintain sec
 
 ### Installation
 
-1. Install SafeDeps from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=your-publisher.safedeps)
+1. Install SafeDeps from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=SwapnilSparsh.safedeps)
 2. Open any project with dependency files
 3. Click the SafeDeps icon in the Activity Bar to start scanning
 
