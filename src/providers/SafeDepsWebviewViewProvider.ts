@@ -14,6 +14,7 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
   private _isScanning: boolean = false;
   private _currentScanType: string | null = null;
   private _lastProgress: any = null;
+  private _hasAutoScanned: boolean = false; // Track if we've already auto-scanned
 
   constructor(private readonly _extensionUri: vscode.Uri) {
     this._dependencyScanner = new DependencyScanner();
@@ -34,6 +35,23 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
 
     this._setupMessageHandling(webviewView);
     this._loadInitialContent();
+
+    // Trigger automatic scan on first view resolution if enabled and not already scanned
+    const config = vscode.workspace.getConfiguration("safedeps");
+    const autoScanEnabled = config.get<boolean>("autoScanOnOpen", true);
+
+    if (
+      autoScanEnabled &&
+      !this._hasAutoScanned &&
+      !this._lastScanResult &&
+      !this._isScanning
+    ) {
+      this._hasAutoScanned = true;
+      // Delay slightly to ensure webview is fully loaded
+      setTimeout(() => {
+        this._triggerAutoScan();
+      }, 500);
+    }
   }
 
   private _setupMessageHandling(webviewView: vscode.WebviewView): void {
@@ -57,6 +75,12 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
         case "restoreData":
           this._restoreLastData();
           break;
+        case "updateGitignoreSetting":
+          this._updateGitignoreSetting(message.value);
+          break;
+        case "getGitignoreSetting":
+          this._sendGitignoreSetting();
+          break;
       }
     });
   }
@@ -71,6 +95,10 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
       } else if (this._lastScanResult && this._lastCommand) {
         // If we have previous results, restore them
         this._restoreLastData();
+      } else {
+        // Automatically trigger a scan when the extension first opens
+        // The webview will handle this via its DOMContentLoaded event
+        // which will trigger scanDependencies() if no saved state exists
       }
       // If neither scanning nor previous results exist, the webview's DOMContentLoaded
       // event will check its persisted state or trigger a new scan
@@ -101,6 +129,16 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
       this._view.webview.postMessage({
         command: updateCommand,
         data: this._lastScanResult,
+      });
+    }
+  }
+
+  private _triggerAutoScan(): void {
+    // Automatically trigger a scan when the extension opens
+    // This will show a loading state and perform the scan
+    if (this._view) {
+      this._view.webview.postMessage({
+        command: "autoScan",
       });
     }
   }
@@ -244,6 +282,59 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
         command: "showError",
         error: `${message}: ${(error as Error).message}`,
       });
+    }
+  }
+
+  private async _updateGitignoreSetting(value: boolean): Promise<void> {
+    try {
+      const config = vscode.workspace.getConfiguration("safedeps");
+      await config.update(
+        "respectGitignore",
+        value,
+        vscode.ConfigurationTarget.Global
+      );
+
+      // Clear the gitignore cache when the setting changes
+      if (this._dependencyScanner) {
+        const baseScannerAny = this._dependencyScanner as any;
+        if (
+          baseScannerAny.gitIgnoreService &&
+          typeof baseScannerAny.gitIgnoreService.clearCache === "function"
+        ) {
+          baseScannerAny.gitIgnoreService.clearCache();
+        }
+      }
+
+      if (this._ecosystemScanner) {
+        const baseScannerAny = this._ecosystemScanner as any;
+        if (
+          baseScannerAny.gitIgnoreService &&
+          typeof baseScannerAny.gitIgnoreService.clearCache === "function"
+        ) {
+          baseScannerAny.gitIgnoreService.clearCache();
+        }
+      }
+    } catch (error) {
+      console.error("Failed to update gitignore setting:", error);
+      vscode.window.showErrorMessage(
+        `Failed to update .gitignore setting: ${(error as Error).message}`
+      );
+    }
+  }
+
+  private async _sendGitignoreSetting(): Promise<void> {
+    try {
+      const config = vscode.workspace.getConfiguration("safedeps");
+      const respectGitignore = config.get<boolean>("respectGitignore", true);
+
+      if (this._view) {
+        this._view.webview.postMessage({
+          command: "updateGitignoreSetting",
+          value: respectGitignore,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to get gitignore setting:", error);
     }
   }
 }

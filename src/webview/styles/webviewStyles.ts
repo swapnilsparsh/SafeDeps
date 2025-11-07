@@ -16,6 +16,7 @@ export const getWebviewStyles = (): string => {
         .header {
             display: flex;
             align-items: center;
+            justify-content: space-between;
             margin-bottom: 20px;
             padding-bottom: 12px;
             border-bottom: 1px solid var(--vscode-panel-border);
@@ -30,6 +31,121 @@ export const getWebviewStyles = (): string => {
             font-size: 16px;
             font-weight: 600;
             color: var(--vscode-titleBar-activeForeground);
+        }
+        .settings-button {
+            background: transparent;
+            color: var(--vscode-foreground);
+            border: 1px solid var(--vscode-panel-border);
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.15s ease;
+        }
+        .settings-button:hover {
+            background: var(--vscode-button-secondaryHoverBackground);
+            border-color: var(--vscode-button-border);
+        }
+        .settings-panel {
+            margin-bottom: 16px;
+            padding: 12px;
+            background-color: var(--vscode-editor-inactiveSelectionBackground);
+            border: 1px solid var(--vscode-panel-border);
+            border-radius: 4px;
+            animation: slideDown 0.2s ease-out;
+        }
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .settings-content h3 {
+            color: var(--vscode-titleBar-activeForeground);
+            border-bottom: 1px solid var(--vscode-panel-border);
+            padding-bottom: 8px;
+            margin-bottom: 12px;
+        }
+        .setting-item {
+            margin-bottom: 12px;
+        }
+        .toggle-label {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+            gap: 10px;
+        }
+        .toggle-label input[type="checkbox"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+            background-color: var(--vscode-input-background);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: 10px;
+            transition: background-color 0.2s;
+        }
+        .toggle-slider::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            left: 2px;
+            top: 1px;
+            background-color: var(--vscode-foreground);
+            border-radius: 50%;
+            transition: transform 0.2s;
+        }
+        .toggle-label input[type="checkbox"]:checked + .toggle-slider {
+            background-color: var(--vscode-button-background);
+        }
+        .toggle-label input[type="checkbox"]:checked + .toggle-slider::after {
+            transform: translateX(20px);
+        }
+        .toggle-label input[type="checkbox"]:focus + .toggle-slider {
+            outline: 2px solid var(--vscode-focusBorder);
+            outline-offset: 2px;
+        }
+        .toggle-text {
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .setting-description {
+            margin: 8px 0 0 50px;
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            line-height: 1.4;
+        }
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        @keyframes slideOutRight {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+            }
+            to {
+                opacity: 0;
+                transform: translateX(20px);
+            }
         }
         .scan-button {
             background: var(--vscode-button-background);

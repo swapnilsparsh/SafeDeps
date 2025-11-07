@@ -51,6 +51,10 @@ export const DEPENDENCY_FILE_CONFIGS: readonly IScanConfig[] = [
   },
 ] as const;
 
+/**
+ * @deprecated Use GitIgnoreService.getDefaultExcludePatterns() instead
+ * Legacy exclude patterns - kept for reference
+ */
 export const EXCLUDE_PATTERNS = [
   "**/node_modules/**",
   "**/venv/**",
