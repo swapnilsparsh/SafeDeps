@@ -75,6 +75,12 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
         case "restoreData":
           this._restoreLastData();
           break;
+        case "updateGitignoreSetting":
+          this._updateGitignoreSetting(message.value);
+          break;
+        case "getGitignoreSetting":
+          this._sendGitignoreSetting();
+          break;
       }
     });
   }
@@ -276,6 +282,59 @@ export class SafeDepsWebviewViewProvider implements vscode.WebviewViewProvider {
         command: "showError",
         error: `${message}: ${(error as Error).message}`,
       });
+    }
+  }
+
+  private async _updateGitignoreSetting(value: boolean): Promise<void> {
+    try {
+      const config = vscode.workspace.getConfiguration("safedeps");
+      await config.update(
+        "respectGitignore",
+        value,
+        vscode.ConfigurationTarget.Global
+      );
+
+      // Clear the gitignore cache when the setting changes
+      if (this._dependencyScanner) {
+        const baseScannerAny = this._dependencyScanner as any;
+        if (
+          baseScannerAny.gitIgnoreService &&
+          typeof baseScannerAny.gitIgnoreService.clearCache === "function"
+        ) {
+          baseScannerAny.gitIgnoreService.clearCache();
+        }
+      }
+
+      if (this._ecosystemScanner) {
+        const baseScannerAny = this._ecosystemScanner as any;
+        if (
+          baseScannerAny.gitIgnoreService &&
+          typeof baseScannerAny.gitIgnoreService.clearCache === "function"
+        ) {
+          baseScannerAny.gitIgnoreService.clearCache();
+        }
+      }
+    } catch (error) {
+      console.error("Failed to update gitignore setting:", error);
+      vscode.window.showErrorMessage(
+        `Failed to update .gitignore setting: ${(error as Error).message}`
+      );
+    }
+  }
+
+  private async _sendGitignoreSetting(): Promise<void> {
+    try {
+      const config = vscode.workspace.getConfiguration("safedeps");
+      const respectGitignore = config.get<boolean>("respectGitignore", true);
+
+      if (this._view) {
+        this._view.webview.postMessage({
+          command: "updateGitignoreSetting",
+          value: respectGitignore,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to get gitignore setting:", error);
     }
   }
 }

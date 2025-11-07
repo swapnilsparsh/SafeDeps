@@ -1079,6 +1079,18 @@ export const getWebviewJavaScript = (): string => {
                         scanDependencies();
                     }
                     break;
+                case 'updateGitignoreSetting':
+                    // Update the toggle when setting changes from extension
+                    const toggle = document.getElementById('respectGitignoreToggle');
+                    if (toggle) {
+                        toggle.checked = message.value;
+                    }
+                    // Save in webview state
+                    const state = vscode.getState() || {};
+                    state.respectGitignore = message.value;
+                    vscode.setState(state);
+                    break;
+                    break;
             }
         });
 
@@ -1091,6 +1103,9 @@ export const getWebviewJavaScript = (): string => {
         window.addEventListener('DOMContentLoaded', () => {
             // First, restore state from VS Code storage
             restoreWebviewState();
+
+            // Initialize settings UI
+            initializeSettings();
 
             // If we have a loading state, restore it but also request backend state
             // in case the scan completed while we were away
@@ -1146,6 +1161,114 @@ export const getWebviewJavaScript = (): string => {
             const state = vscode.getState();
             if (state && state.currentFilter) {
                 currentFilter = state.currentFilter;
+            }
+        }
+
+        // Settings Management
+        let settingsVisible = false;
+
+        function toggleSettings() {
+            const settingsPanel = document.getElementById('settings-panel');
+            settingsVisible = !settingsVisible;
+
+            if (settingsPanel) {
+                settingsPanel.style.display = settingsVisible ? 'block' : 'none';
+            }
+
+            // Save settings visibility state
+            const state = vscode.getState() || {};
+            state.settingsVisible = settingsVisible;
+            vscode.setState(state);
+        }
+
+        function handleGitignoreToggle(checked) {
+            // Send message to extension to update the configuration
+            vscode.postMessage({
+                command: 'updateGitignoreSetting',
+                value: checked
+            });
+
+            // Save the setting in webview state as well
+            const state = vscode.getState() || {};
+            state.respectGitignore = checked;
+            vscode.setState(state);
+
+            // Show a subtle notification
+            showSettingUpdateNotification(checked);
+
+            // Auto-rescan to show immediate effect
+            autoRescanAfterSettingChange(checked);
+        }
+
+        function autoRescanAfterSettingChange(enabled) {
+            // Don't rescan if already loading
+            if (isLoading) {
+                return;
+            }
+
+            // Small delay to let the notification show and setting save
+            setTimeout(() => {
+                // Trigger rescan based on last scan type, or default to scanDependencies
+                if (lastCommand === 'scanAllEcosystems') {
+                    scanAllEcosystems();
+                } else if (lastCommand === 'scanEcosystem' && currentScanType && currentScanType.startsWith('ecosystem:')) {
+                    const ecosystem = currentScanType.split(':')[1];
+                    scanEcosystem(ecosystem);
+                } else {
+                    // Default to basic workspace scan
+                    scanDependencies();
+                }
+            }, 300); // Small delay for better UX (notification appears first)
+        }
+
+        function showSettingUpdateNotification(enabled) {
+            const notification = document.createElement('div');
+            notification.style.cssText = \`
+                position: fixed;
+                top: 60px;
+                right: 20px;
+                background: var(--vscode-notifications-background);
+                color: var(--vscode-notifications-foreground);
+                border: 1px solid var(--vscode-notifications-border);
+                padding: 12px 16px;
+                border-radius: 4px;
+                font-size: 12px;
+                z-index: 1000;
+                animation: slideInRight 0.3s ease-out;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            \`;
+            notification.innerHTML = enabled
+                ? '<div>✓ .gitignore respect enabled</div><div style="font-size: 10px; margin-top: 4px; opacity: 0.8;">Rescanning...</div>'
+                : '<div>✗ .gitignore respect disabled</div><div style="font-size: 10px; margin-top: 4px; opacity: 0.8;">Rescanning...</div>';
+
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.animation = 'slideOutRight 0.3s ease-out';
+                setTimeout(() => notification.remove(), 300);
+            }, 2000);
+        }
+
+        function initializeSettings() {
+            // Get the current setting from workspace configuration
+            vscode.postMessage({ command: 'getGitignoreSetting' });
+
+            // Restore settings visibility from state
+            const state = vscode.getState();
+            if (state && state.settingsVisible !== undefined) {
+                settingsVisible = state.settingsVisible;
+                const settingsPanel = document.getElementById('settings-panel');
+                if (settingsPanel) {
+                    settingsPanel.style.display = settingsVisible ? 'block' : 'none';
+                }
+            }
+
+            // Restore the toggle state if saved
+            if (state && state.respectGitignore !== undefined) {
+                const toggle = document.getElementById('respectGitignoreToggle');
+                if (toggle) {
+                    toggle.checked = state.respectGitignore;
+                }
             }
         }
 

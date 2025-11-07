@@ -2,7 +2,7 @@
   "name": "safedeps",
   "displayName": "SafeDeps - Dependency Security Scanner",
   "description": "Comprehensive dependency security scanner supporting npm, Python, Go, Rust, PHP, Ruby, and Java. Real-time vulnerability detection, license compliance, and package analysis.",
-  "version": "1.9.0",
+  "version": "2.0.0",
   "publisher": "swapnilsparsh",
   "author": {
     "name": "Swapnil Sparsh",
@@ -93,6 +93,19 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically scan dependencies when the SafeDeps view is opened"
+        },
+        "safedeps.respectGitignore": {
+          "type": "boolean",
+          "default": true,
+          "description": "Respect .gitignore files when scanning for dependency files. When enabled, directories and files listed in .gitignore will be excluded from scans."
+        },
+        "safedeps.additionalExcludePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Additional glob patterns to exclude from dependency scans (e.g., '**/custom-dir/**'). These are combined with default exclude patterns and .gitignore patterns."
         }
       }
     }

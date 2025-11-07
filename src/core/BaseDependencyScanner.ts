@@ -6,9 +6,15 @@ import {
   ScanSummary,
 } from "../types";
 import { IDependencyScanner } from "./interfaces";
-import { DEPENDENCY_FILE_CONFIGS, EXCLUDE_PATTERNS } from "./config";
+import { DEPENDENCY_FILE_CONFIGS } from "./config";
+import { GitIgnoreService } from "../services/gitignore";
 
 export class BaseDependencyScanner implements IDependencyScanner {
+  protected gitIgnoreService: GitIgnoreService;
+
+  constructor() {
+    this.gitIgnoreService = new GitIgnoreService();
+  }
   public async scanWorkspace(): Promise<DependencyFile[]> {
     const dependencyFiles: DependencyFile[] = [];
 
@@ -31,12 +37,19 @@ export class BaseDependencyScanner implements IDependencyScanner {
     const dependencyFiles: DependencyFile[] = [];
 
     try {
+      // Get combined exclude patterns from .gitignore and defaults
+      const excludePatterns = await this.getExcludePatterns(workspaceFolder);
+      const excludePattern =
+        excludePatterns.length > 0
+          ? `{${excludePatterns.join(",")}}`
+          : undefined;
+
       for (const fileConfig of DEPENDENCY_FILE_CONFIGS) {
         const pattern = new vscode.RelativePattern(
           workspaceFolder,
           fileConfig.pattern
         );
-        const excludePattern = `{${EXCLUDE_PATTERNS.join(",")}}`;
+
         const foundFiles = await vscode.workspace.findFiles(
           pattern,
           excludePattern
@@ -65,6 +78,45 @@ export class BaseDependencyScanner implements IDependencyScanner {
     return dependencyFiles.sort((a, b) =>
       a.relativePath.localeCompare(b.relativePath)
     );
+  }
+
+  /**
+   * Get combined exclude patterns from .gitignore files and default patterns
+   */
+  protected async getExcludePatterns(
+    workspaceFolder: vscode.WorkspaceFolder
+  ): Promise<string[]> {
+    const patterns: string[] = [];
+
+    // Always include default patterns
+    patterns.push(...GitIgnoreService.getDefaultExcludePatterns());
+
+    // Check configuration
+    const config = vscode.workspace.getConfiguration("safedeps");
+    const respectGitignore = config.get<boolean>("respectGitignore", true);
+    const additionalPatterns = config.get<string[]>(
+      "additionalExcludePatterns",
+      []
+    );
+
+    // Add user-defined additional patterns
+    if (additionalPatterns.length > 0) {
+      patterns.push(...additionalPatterns);
+    }
+
+    // Add .gitignore patterns if enabled
+    if (respectGitignore) {
+      try {
+        const gitignorePatterns =
+          await this.gitIgnoreService.getGitIgnorePatterns(workspaceFolder);
+        patterns.push(...gitignorePatterns);
+      } catch (error) {
+        console.error("Error reading .gitignore patterns:", error);
+      }
+    }
+
+    // Remove duplicates
+    return [...new Set(patterns)];
   }
 
   public async scanForFileType(

@@ -1,0 +1,1 @@
+export { GitIgnoreService } from "./GitIgnoreService";
