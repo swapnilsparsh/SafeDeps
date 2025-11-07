@@ -2,7 +2,7 @@
   "name": "safedeps",
   "displayName": "SafeDeps - Dependency Security Scanner",
   "description": "Comprehensive dependency security scanner supporting npm, Python, Go, Rust, PHP, Ruby, and Java. Real-time vulnerability detection, license compliance, and package analysis.",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "publisher": "swapnilsparsh",
   "author": {
     "name": "Swapnil Sparsh",
@@ -85,7 +85,17 @@
         "title": "Scan Ecosystem Dependencies",
         "category": "SafeDeps"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "SafeDeps",
+      "properties": {
+        "safedeps.autoScanOnOpen": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically scan dependencies when the SafeDeps view is opened"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",

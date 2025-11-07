@@ -1073,6 +1073,12 @@ export const getWebviewJavaScript = (): string => {
                 case 'showError':
                     showError(message.error);
                     break;
+                case 'autoScan':
+                    // Trigger automatic scan if no saved state exists
+                    if (!lastData && !isLoading) {
+                        scanDependencies();
+                    }
+                    break;
             }
         });
 
