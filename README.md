@@ -5,26 +5,31 @@ SafeDeps is a comprehensive VS Code extension that helps developers maintain sec
 ## 🆕 What's New in v2.0
 
 ### ⚡ Performance Boost
+
 - **Up to 50x faster** scanning with automatic `.gitignore` respect
 - Excludes `node_modules/`, `.next/`, `__pycache__/`, and other build artifacts
 - Smart pattern matching across all 7 ecosystems
 
 ### ⚙️ Settings UI
+
 - New **settings panel** with ⚙️ button in the webview
 - **One-click toggle** for `.gitignore` respect
 - **Auto-rescan** when settings change - see immediate results
 
 ### 🔍 Advanced Search & Filter
+
 - Real-time search with `Ctrl/Cmd+F` shortcut
 - Search packages by name, version, CVE, license, or author
 - Combine search with vulnerability filters
 
 ### 📊 Progress Tracking
+
 - Real-time progress indicators during scans
 - Visual progress bar with time estimates
 - Detailed operation status
 
 ### 💾 State Persistence
+
 - Scan results persist across webview reloads
 - No more losing data when switching views
 - Smart state restoration
@@ -50,7 +55,16 @@ SafeDeps is a comprehensive VS Code extension that helps developers maintain sec
 - Detailed vulnerability information with remediation suggestions
 - Continuous monitoring of new vulnerabilities
 
-### 📊 **Dependency Analytics**
+### � **Security-First Design**
+
+- **180+ Security Patterns** - Automatically excludes sensitive files from all scans
+- **Never Scans:** `.env` files, private keys, credentials, passwords, secrets, cloud configs
+- **3-Layer Protection** - Pattern filtering, runtime validation, and configuration protection
+- **Cannot Be Disabled** - Security exclusions are always enforced, regardless of settings
+- **Verify Security** - Run `SafeDeps: Verify Security Implementation` command to check protection
+- See [SECURITY.md](SECURITY.md) for complete security policy
+
+### �📊 **Dependency Analytics**
 
 - Package size analysis and optimization recommendations
 - License compliance tracking and reporting
@@ -122,6 +136,14 @@ Ctrl+Shift+P → "SafeDeps: Scan Ecosystem Dependencies"
 ```
 
 Choose a specific ecosystem (npm, Python, Go, etc.) for targeted analysis.
+
+#### Verify Security Implementation
+
+```
+Ctrl+Shift+P → "SafeDeps: Verify Security Implementation"
+```
+
+Displays security status confirming that 180+ security patterns are active and sensitive files are protected.
 
 ### ⚙️ Using Settings
 
@@ -210,12 +232,14 @@ Access settings via:
 - Excludes build artifacts, cache directories, and ignored files
 - Dramatically improves scan performance
 - **Toggle directly from the Settings UI** - Changes trigger automatic rescan
+- **Note:** Security-sensitive files (`.env`, keys, credentials) are ALWAYS excluded regardless of this setting
 
 **`safedeps.additionalExcludePatterns`** (default: `[]`)
 
 - Add custom glob patterns to exclude from scans
 - Example: `["**/custom-build/**", "**/temp-files/**"]`
 - Combined with default patterns and `.gitignore` patterns
+- **Note:** Cannot be used to override security exclusions (negation patterns like `!.env` are blocked)
 
 **`safedeps.autoScanOnOpen`** (default: `true`)
 

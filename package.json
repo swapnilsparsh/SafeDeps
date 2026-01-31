@@ -2,7 +2,7 @@
   "name": "safedeps",
   "displayName": "SafeDeps - Dependency Security Scanner",
   "description": "Comprehensive dependency security scanner supporting npm, Python, Go, Rust, PHP, Ruby, and Java. Real-time vulnerability detection, license compliance, and package analysis.",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "publisher": "swapnilsparsh",
   "author": {
     "name": "Swapnil Sparsh",
@@ -84,6 +84,11 @@
         "command": "safedeps.scanEcosystem",
         "title": "Scan Ecosystem Dependencies",
         "category": "SafeDeps"
+      },
+      {
+        "command": "safedeps.verifySecurity",
+        "title": "Verify Security Implementation",
+        "category": "SafeDeps"
       }
     ],
     "configuration": {
@@ -97,7 +102,7 @@
         "safedeps.respectGitignore": {
           "type": "boolean",
           "default": true,
-          "description": "Respect .gitignore files when scanning for dependency files. When enabled, directories and files listed in .gitignore will be excluded from scans."
+          "description": "Respect .gitignore files when scanning for dependency files. When enabled, directories and files listed in .gitignore will be excluded from scans. Note: Security-sensitive files (.env, keys, credentials) are ALWAYS excluded regardless of this setting."
         },
         "safedeps.additionalExcludePatterns": {
           "type": "array",
@@ -105,7 +110,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "Additional glob patterns to exclude from dependency scans (e.g., '**/custom-dir/**'). These are combined with default exclude patterns and .gitignore patterns."
+          "description": "Additional glob patterns to exclude from dependency scans (e.g., '**/custom-dir/**'). These are combined with default exclude patterns and .gitignore patterns. Cannot be used to override security exclusions."
         }
       }
     }

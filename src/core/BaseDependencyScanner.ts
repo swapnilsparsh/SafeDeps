@@ -32,7 +32,7 @@ export class BaseDependencyScanner implements IDependencyScanner {
   }
 
   public async scanWorkspaceFolder(
-    workspaceFolder: vscode.WorkspaceFolder
+    workspaceFolder: vscode.WorkspaceFolder,
   ): Promise<DependencyFile[]> {
     const dependencyFiles: DependencyFile[] = [];
 
@@ -47,16 +47,25 @@ export class BaseDependencyScanner implements IDependencyScanner {
       for (const fileConfig of DEPENDENCY_FILE_CONFIGS) {
         const pattern = new vscode.RelativePattern(
           workspaceFolder,
-          fileConfig.pattern
+          fileConfig.pattern,
         );
 
         const foundFiles = await vscode.workspace.findFiles(
           pattern,
-          excludePattern
+          excludePattern,
         );
 
         for (const fileUri of foundFiles) {
           const relativePath = vscode.workspace.asRelativePath(fileUri, false);
+
+          // DEFENSIVE: Extra validation to ensure no security-sensitive files slip through
+          if (GitIgnoreService.isSecuritySensitiveFile(fileUri.fsPath)) {
+            const reason = GitIgnoreService.getExclusionReason(fileUri.fsPath);
+            console.warn(
+              `[SafeDeps Security] Blocked security-sensitive file from scan: ${relativePath} (${reason})`,
+            );
+            continue; // Skip this file
+          }
 
           dependencyFiles.push({
             type: fileConfig.type,
@@ -71,12 +80,12 @@ export class BaseDependencyScanner implements IDependencyScanner {
     } catch (error) {
       console.error(
         `Error scanning workspace folder ${workspaceFolder.name}:`,
-        error
+        error,
       );
     }
 
     return dependencyFiles.sort((a, b) =>
-      a.relativePath.localeCompare(b.relativePath)
+      a.relativePath.localeCompare(b.relativePath),
     );
   }
 
@@ -84,11 +93,23 @@ export class BaseDependencyScanner implements IDependencyScanner {
    * Get combined exclude patterns from .gitignore files and default patterns
    */
   protected async getExcludePatterns(
-    workspaceFolder: vscode.WorkspaceFolder
+    workspaceFolder: vscode.WorkspaceFolder,
   ): Promise<string[]> {
     const patterns: string[] = [];
 
-    // Always include default patterns
+    // CRITICAL: Always include security patterns first - these cannot be disabled
+    // This protects users from accidentally scanning sensitive files like .env, keys, etc.
+    const securityPatterns = GitIgnoreService.getSecurityExcludePatterns();
+    patterns.push(...securityPatterns);
+
+    // Log security pattern count for validation (only in development)
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `[SafeDeps Security] Applied ${securityPatterns.length} security exclusion patterns`,
+      );
+    }
+
+    // Always include default build/cache patterns
     patterns.push(...GitIgnoreService.getDefaultExcludePatterns());
 
     // Check configuration
@@ -96,12 +117,25 @@ export class BaseDependencyScanner implements IDependencyScanner {
     const respectGitignore = config.get<boolean>("respectGitignore", true);
     const additionalPatterns = config.get<string[]>(
       "additionalExcludePatterns",
-      []
+      [],
     );
 
+    // Validate additional patterns don't try to override security
+    const validatedAdditionalPatterns = additionalPatterns.filter((pattern) => {
+      // Warn if user tries to negate security patterns (e.g., "!.env")
+      if (pattern.startsWith("!")) {
+        console.warn(
+          `[SafeDeps Security] Ignoring negation pattern "${pattern}" - ` +
+            "security-sensitive files cannot be included via configuration",
+        );
+        return false;
+      }
+      return true;
+    });
+
     // Add user-defined additional patterns
-    if (additionalPatterns.length > 0) {
-      patterns.push(...additionalPatterns);
+    if (validatedAdditionalPatterns.length > 0) {
+      patterns.push(...validatedAdditionalPatterns);
     }
 
     // Add .gitignore patterns if enabled
@@ -115,19 +149,19 @@ export class BaseDependencyScanner implements IDependencyScanner {
       }
     }
 
-    // Remove duplicates
+    // Remove duplicates while preserving order (security patterns first)
     return [...new Set(patterns)];
   }
 
   public async scanForFileType(
-    type: DependencyFileType
+    type: DependencyFileType,
   ): Promise<DependencyFile[]> {
     const allFiles = await this.scanWorkspace();
     return allFiles.filter((file) => file.type === type);
   }
 
   public async scanForLanguage(
-    language: DependencyLanguage
+    language: DependencyLanguage,
   ): Promise<DependencyFile[]> {
     const allFiles = await this.scanWorkspace();
     return allFiles.filter((file) => file.language === language);
